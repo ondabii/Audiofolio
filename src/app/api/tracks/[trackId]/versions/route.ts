@@ -1,7 +1,7 @@
 import { NextRequest, NextResponse } from "next/server";
-import { executeQuery } from "@/lib/db";
-import { generatePresignedUrl } from "@/lib/r2";
 import { nanoid } from "nanoid";
+
+export const runtime = "edge";
 
 export async function POST(
   request: NextRequest,
@@ -20,40 +20,39 @@ export async function POST(
     const versionId = nanoid(10);
     const objectKey = `tracks/${trackId}/${versionId}_${fileName}`;
 
+    const DB = (process.env as any).DB;
+    if (!DB) {
+      return NextResponse.json({ error: "Database binding not found" }, { status: 500 });
+    }
+
     // 1. D1 레코드 생성 (pending 상태)
     const sql = `
       INSERT INTO track_versions 
       (id, track_id, audio_url, is_representative, is_visible, duration_ms, file_format, bitrate, file_size_bytes, waveform_data, status)
       VALUES (?, ?, ?, 0, 1, ?, ?, ?, ?, ?, 'pending')
     `;
-    const params = [
+    
+    await DB.prepare(sql).bind(
       versionId,
       trackId,
       objectKey,
-      durationMs || null,
+      durationMs ? parseInt(durationMs) : null,
       contentType,
-      bitrate || null,
-      fileSizeBytes || null,
+      bitrate ? parseInt(bitrate) : null,
+      fileSizeBytes ? parseInt(fileSizeBytes) : null,
       waveformData || null
-    ];
+    ).run();
 
-    const dbRes = await executeQuery(sql, params);
-    
-    if (!dbRes || !dbRes.success) {
-      console.error("Failed to insert into D1", dbRes);
-      return NextResponse.json({ error: "Database error" }, { status: 500 });
-    }
+    // 풀스택 환경에서 R2에 직접 PUT 업로드할 수 있도록 동일 도메인의 /api/upload 상대경로 주소를 리턴해 줍니다.
+    const uploadUrl = `/api/upload?trackId=${trackId}&versionId=${versionId}&fileName=${encodeURIComponent(fileName)}&durationMs=${durationMs || 0}&fileSizeBytes=${fileSizeBytes || 0}&bitrate=${bitrate || 0}`;
 
-    // 2. S3 Pre-signed URL 발급
-    const uploadUrl = await generatePresignedUrl(objectKey, contentType);
-    
     return NextResponse.json({
       versionId,
       uploadUrl,
       objectKey
     });
-  } catch (error) {
+  } catch (error: any) {
     console.error("API Error in versions POST:", error);
-    return NextResponse.json({ error: "Internal Server Error" }, { status: 500 });
+    return NextResponse.json({ error: error.message }, { status: 500 });
   }
 }
