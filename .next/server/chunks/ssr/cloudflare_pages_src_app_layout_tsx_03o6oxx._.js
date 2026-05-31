@@ -1,3 +1,0 @@
-module.exports=[33571,a=>{"use strict";var b=a.i(45037);a.s(["default",0,function({children:a}){return(0,b.jsx)("html",{lang:"ko",className:"dark",children:(0,b.jsx)("body",{className:"h-screen w-screen overflow-hidden antialiased bg-main-bg relative flex justify-center",children:a})})},"metadata",0,{title:"Audiofolio",description:"음악 창작자 포트폴리오 및 오디오 A/B 테스트 관리"}])},86174,a=>{a.n(a.i(33571))}];
-
-//# sourceMappingURL=cloudflare_pages_src_app_layout_tsx_03o6oxx._.js.map

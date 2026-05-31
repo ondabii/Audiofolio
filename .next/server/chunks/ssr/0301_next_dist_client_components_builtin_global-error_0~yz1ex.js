@@ -1,3 +1,0 @@
-module.exports=[30817,(a,b,c)=>{let{createClientModuleProxy:d}=a.r(6118);a.n(d("[project]/cloudflare_pages/node_modules/next/dist/client/components/builtin/global-error.js <module evaluation>"))},86224,(a,b,c)=>{let{createClientModuleProxy:d}=a.r(6118);a.n(d("[project]/cloudflare_pages/node_modules/next/dist/client/components/builtin/global-error.js"))},14183,a=>{"use strict";a.i(30817);var b=a.i(86224);a.n(b)},96523,a=>{a.n(a.i(14183))}];
-
-//# sourceMappingURL=0301_next_dist_client_components_builtin_global-error_0~yz1ex.js.map

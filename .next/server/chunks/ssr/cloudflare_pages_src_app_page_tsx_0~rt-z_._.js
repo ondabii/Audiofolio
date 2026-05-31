@@ -1,3 +1,0 @@
-module.exports=[8158,a=>{"use strict";var b=a.i(44845);a.s(["default",0,function(){return(0,b.jsx)("div",{className:"flex flex-col h-screen items-center justify-center bg-[#111416] text-white",children:(0,b.jsxs)("div",{className:"flex flex-col items-center gap-2",children:[(0,b.jsx)("h1",{className:"text-4xl font-extrabold tracking-tight text-white/90",children:"Audiofolio"}),(0,b.jsx)("p",{className:"text-xs text-white/40 font-medium tracking-widest",children:"by ondabii"})]})})}])}];
-
-//# sourceMappingURL=cloudflare_pages_src_app_page_tsx_0~rt-z_._.js.map
