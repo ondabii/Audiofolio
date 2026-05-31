@@ -2,6 +2,7 @@
 import { useEffect, useState } from "react";
 import { useRouter } from "next/navigation";
 import { Loader, Plus, Folder, Trash2 } from "lucide-react";
+import Link from "next/link";
 
 export default function AdminHome() {
   const router = useRouter();
@@ -142,10 +143,10 @@ export default function AdminHome() {
         ) : (
           <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-4">
             {projects.map((p) => (
-              <div 
+              <Link 
                 key={p.id}
-                onClick={() => router.push(`/admin/${p.custom_alias || p.short_id}`)}
-                className="bg-[#1c2126] hover:bg-[#23292e] border border-white/5 hover:border-primary/50 transition-all p-6 rounded-lg cursor-pointer group"
+                href={`/admin/${p.custom_alias || p.short_id}`}
+                className="bg-[#1c2126] hover:bg-[#23292e] border border-white/5 hover:border-primary/50 transition-all p-6 rounded-lg cursor-pointer group block"
               >
                 <div className="flex items-center justify-between gap-3 mb-2">
                   <div className="flex items-center gap-3 truncate">
@@ -153,15 +154,18 @@ export default function AdminHome() {
                     <h3 className="font-bold text-lg group-hover:text-primary transition-colors truncate">{p.title}</h3>
                   </div>
                   <button
-                    onClick={(e) => handleDelete(p.id, p.title, e)}
-                    className="p-1.5 text-white/40 hover:text-red-400 hover:bg-white/5 rounded transition-all shrink-0"
+                    onClick={(e) => {
+                      e.preventDefault(); // Link 이동 차단
+                      handleDelete(p.id, p.title, e);
+                    }}
+                    className="p-1.5 text-white/40 hover:text-red-400 hover:bg-white/5 rounded transition-all shrink-0 relative z-10"
                     title="프로젝트 영구 삭제"
                   >
                     <Trash2 className="w-4 h-4" />
                   </button>
                 </div>
                 <p className="text-xs text-white/40 ml-8">/{p.custom_alias || p.short_id}</p>
-              </div>
+              </Link>
             ))}
           </div>
         )}
