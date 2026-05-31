@@ -29,7 +29,10 @@ export default function AdminHome() {
 
   const handleCreate = async (e: React.FormEvent) => {
     e.preventDefault();
-    if (!newTitle.trim() || !newAlias.trim()) return;
+    if (!newTitle.trim()) return;
+    
+    // Alias가 비어있으면 자동으로 고유한 임시 alias 부여
+    const finalAlias = newAlias.trim() || `project-${Math.random().toString(36).substring(2, 8)}`;
     const API_BASE = process.env.NEXT_PUBLIC_API_URL || "";
     
     // Create Project
@@ -41,7 +44,7 @@ export default function AdminHome() {
         payload: {
           id: (Math.random() + 1).toString(36).substring(7),
           title: newTitle,
-          short_id: newAlias
+          short_id: finalAlias
         }
       })
     });
