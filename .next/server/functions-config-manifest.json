@@ -1,0 +1,10 @@
+{
+  "version": 1,
+  "functions": {
+    "/api/actions": {},
+    "/api/projects": {},
+    "/api/projects/[alias]": {},
+    "/api/upload": {},
+    "/api/versions/[versionId]": {}
+  }
+}

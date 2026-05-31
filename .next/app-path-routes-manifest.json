@@ -1,0 +1,15 @@
+{
+  "/[alias]/page": "/[alias]",
+  "/_global-error/page": "/_global-error",
+  "/_not-found/page": "/_not-found",
+  "/admin/[alias]/page": "/admin/[alias]",
+  "/admin/page": "/admin",
+  "/api/actions/route": "/api/actions",
+  "/api/projects/[alias]/route": "/api/projects/[alias]",
+  "/api/projects/route": "/api/projects",
+  "/api/tracks/[trackId]/versions/route": "/api/tracks/[trackId]/versions",
+  "/api/upload/route": "/api/upload",
+  "/api/versions/[versionId]/route": "/api/versions/[versionId]",
+  "/favicon.ico/route": "/favicon.ico",
+  "/page": "/"
+}

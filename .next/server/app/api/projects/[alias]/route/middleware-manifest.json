@@ -1,0 +1,40 @@
+{
+  "sorted_middleware": [
+    "/api/projects/[alias]/route"
+  ],
+  "middleware": {},
+  "instrumentation": null,
+  "functions": {
+    "/api/projects/[alias]/route": {
+      "files": [
+        "server/middleware-build-manifest.js",
+        "server/interception-route-rewrite-manifest.js",
+        "required-server-files.js",
+        "server/server-reference-manifest.js",
+        "server/app/api/projects/[alias]/route_client-reference-manifest.js",
+        "server/edge/chunks/0oy5_pages__next-internal_server_app_api_projects_[alias]_route_actions_0srhv7_.js",
+        "server/edge/chunks/0301_next_dist_esm_0qw478d._.js",
+        "server/edge/chunks/[root-of-the-server]__12i~2y8._.js",
+        "server/edge/chunks/0yh._next_dist_esm_build_templates_edge-wrapper_0ca90sb.js"
+      ],
+      "name": "app/api/projects/[alias]/route",
+      "page": "/api/projects/[alias]/route",
+      "entrypoint": "server/edge/chunks/0yh._next_dist_esm_build_templates_edge-wrapper_0ca90sb.js",
+      "matchers": [
+        {
+          "regexp": "^/api/projects/(?P<nxtPalias>[^/]+?)(?:/)?$",
+          "originalSource": "/api/projects/[alias]"
+        }
+      ],
+      "wasm": [],
+      "assets": [],
+      "env": {
+        "__NEXT_BUILD_ID": "KrjiMVr6RCyZ0LRXaaZoX",
+        "NEXT_SERVER_ACTIONS_ENCRYPTION_KEY": "mZgp0Pus/9N15r5vL0/p5/jUoYeimS9+E2xUlvmw3JM=",
+        "__NEXT_PREVIEW_MODE_ID": "00feada53e8b22220850923dc198a202",
+        "__NEXT_PREVIEW_MODE_ENCRYPTION_KEY": "5151a43e7ba724fa6ca9fe9a9e251cae1e7fe23701094e98bd5c119b42a28521",
+        "__NEXT_PREVIEW_MODE_SIGNING_KEY": "1d3b691c593e68bd0de3de0b71ac104f445e3bcaa900c0a12bd8fa0e267ad60a"
+      }
+    }
+  }
+}

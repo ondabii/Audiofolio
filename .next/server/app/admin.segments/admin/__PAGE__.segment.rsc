@@ -1,0 +1,9 @@
+1:"$Sreact.fragment"
+2:I[91624,["/_next/static/chunks/0zfn9wc310_c0.js","/_next/static/chunks/0q43m7y650pcg.js"],"ClientPageRoot"]
+3:I[5212,["/_next/static/chunks/0zfn9wc310_c0.js","/_next/static/chunks/0q43m7y650pcg.js","/_next/static/chunks/0.lrzxfc6h.g3.js"],"default"]
+6:I[31801,["/_next/static/chunks/0zfn9wc310_c0.js","/_next/static/chunks/0q43m7y650pcg.js"],"OutletBoundary"]
+7:"$Sreact.suspense"
+0:{"rsc":["$","$1","c",{"children":[["$","$L2",null,{"Component":"$3","serverProvidedParams":{"searchParams":{},"params":{},"promises":["$@4","$@5"]}}],[["$","script","script-0",{"src":"/_next/static/chunks/0.lrzxfc6h.g3.js","async":true}]],["$","$L6",null,{"children":["$","$7",null,{"name":"Next.MetadataOutlet","children":"$@8"}]}]]}],"isPartial":false,"staleTime":300,"varyParams":null,"buildId":"KrjiMVr6RCyZ0LRXaaZoX"}
+4:{}
+5:"$0:rsc:props:children:0:props:serverProvidedParams:params"
+8:null

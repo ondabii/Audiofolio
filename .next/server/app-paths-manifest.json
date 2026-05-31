@@ -1,0 +1,15 @@
+{
+  "/[alias]/page": "app/[alias]/page.js",
+  "/_global-error/page": "app/_global-error/page.js",
+  "/_not-found/page": "app/_not-found/page.js",
+  "/admin/[alias]/page": "app/admin/[alias]/page.js",
+  "/admin/page": "app/admin/page.js",
+  "/api/actions/route": "app-edge-has-no-entrypoint",
+  "/api/projects/[alias]/route": "app-edge-has-no-entrypoint",
+  "/api/projects/route": "app-edge-has-no-entrypoint",
+  "/api/tracks/[trackId]/versions/route": "app/api/tracks/[trackId]/versions/route.js",
+  "/api/upload/route": "app-edge-has-no-entrypoint",
+  "/api/versions/[versionId]/route": "app-edge-has-no-entrypoint",
+  "/favicon.ico/route": "app/favicon.ico/route.js",
+  "/page": "app/page.js"
+}
