@@ -4,7 +4,6 @@ export const runtime = "edge";
 
 export async function GET() {
   try {
-    // Cloudflare Pages D1 바인딩 획득
     const DB = (process.env as any).DB;
     if (!DB) {
       return NextResponse.json({ error: "Database binding not found" }, { status: 500 });

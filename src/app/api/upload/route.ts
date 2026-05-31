@@ -27,7 +27,6 @@ export async function PUT(request: NextRequest) {
 
     const objectKey = `tracks/${trackId}/${versionId}_${fileName}`;
 
-    // 1. D1 레코드 생성 (pending 상태)
     await DB.prepare(`
       INSERT INTO track_versions 
       (id, track_id, audio_url, is_representative, is_visible, duration_ms, file_format, bitrate, file_size_bytes, waveform_data, status)
@@ -41,7 +40,6 @@ export async function PUT(request: NextRequest) {
       waveformData || null
     ).run();
 
-    // 2. R2 버킷에 직접 파일 PUT 업로드
     const arrayBuffer = await request.arrayBuffer();
     await R2_BUCKET.put(objectKey, arrayBuffer, {
       httpMetadata: { contentType: contentType }

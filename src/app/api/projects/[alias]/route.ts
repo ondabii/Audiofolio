@@ -18,7 +18,6 @@ export async function GET(
       return NextResponse.json({ error: "Database binding not found" }, { status: 500 });
     }
 
-    // 1. 프로젝트 메타데이터 조회
     const { results: projRes } = await DB.prepare(
       "SELECT * FROM projects WHERE custom_alias = ? OR short_id = ? OR id = ?"
     ).bind(alias, alias, alias).all();
@@ -29,7 +28,6 @@ export async function GET(
 
     const project = projRes[0];
 
-    // 2. 카테고리 조회
     const { results: categories } = await DB.prepare(
       "SELECT * FROM categories WHERE project_id = ? ORDER BY order_index"
     ).bind(project.id).all();
@@ -38,7 +36,6 @@ export async function GET(
       return NextResponse.json({ ...project, categories: [] });
     }
 
-    // 3. 트랙 조회
     const catIds = categories.map((c: any) => `'${c.id}'`).join(',');
     const { results: tracks } = await DB.prepare(
       `SELECT * FROM tracks WHERE category_id IN (${catIds}) ORDER BY order_index`
@@ -51,7 +48,6 @@ export async function GET(
       });
     }
 
-    // 4. 트랙 버전 조회 (대표 및 노출 여부 필터링)
     const trackIds = tracks.map((t: any) => `'${t.id}'`).join(',');
     let verQuery = `SELECT * FROM track_versions WHERE track_id IN (${trackIds}) ORDER BY order_index ASC, created_at DESC`;
     if (!isAdmin) {
@@ -59,7 +55,6 @@ export async function GET(
     }
     const { results: versions } = await DB.prepare(verQuery).all();
 
-    // 5. 트리 형태로 조합하여 반환
     const assembled = {
       ...project,
       categories: categories.map((c: any) => ({

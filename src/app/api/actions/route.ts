@@ -30,7 +30,6 @@ export async function POST(request: NextRequest) {
         break;
 
       case "deleteProject":
-        // 1. R2 실물 오디오 파일 목록 조회 및 청소
         if (R2_BUCKET) {
           const { results: keysRes } = await DB.prepare(`
             SELECT audio_url FROM track_versions 
@@ -53,8 +52,6 @@ export async function POST(request: NextRequest) {
             }
           }
         }
-
-        // 2. D1 프로젝트 메타데이터 Cascade 삭제
         await DB.prepare("DELETE FROM projects WHERE id = ?").bind(payload.id).run();
         break;
 
