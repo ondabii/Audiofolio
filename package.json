@@ -1,29 +1,28 @@
 {
-  "name": "audiofolio",
+  "name": "next-temp",
   "version": "0.1.0",
   "private": true,
   "scripts": {
     "dev": "next dev",
     "build": "next build",
-    "build:static": "powershell -Command \"$env:NEXT_PUBLIC_STATIC_EXPORT='true'; if (Test-Path 'src/app/api') { Move-Item 'src/app/api' 'temp_api' -Force }; if (Test-Path '.next') { Remove-Item -Recurse -Force '.next' }; npx next build; if (Test-Path 'temp_api') { Move-Item 'temp_api' 'src/app/api' -Force }; if (Test-Path 'build') { Remove-Item -Recurse -Force 'build' }; if (Test-Path 'out/index.html') { Copy-Item 'out/index.html' 'out/404.html' -Force }; if (Test-Path 'out') { Rename-Item 'out' 'build' }\"",
     "start": "next start",
     "lint": "eslint"
   },
   "dependencies": {
-    "@aws-sdk/client-s3": "^3.1057.0",
-    "@aws-sdk/s3-request-presigner": "^3.1057.0",
     "@dnd-kit/core": "^6.3.1",
     "@dnd-kit/sortable": "^10.0.0",
     "@dnd-kit/utilities": "^3.2.2",
     "lucide-react": "^1.17.0",
+    "music-metadata": "^11.12.3",
     "music-metadata-browser": "^2.5.11",
-    "nanoid": "^5.1.11",
-    "next": "16.2.6",
+    "next": "^15.5.2",
     "react": "19.2.4",
     "react-dom": "19.2.4",
     "zustand": "^5.0.14"
   },
   "devDependencies": {
+    "@cloudflare/next-on-pages": "^1.13.16",
+    "@cloudflare/workers-types": "^4.20260531.1",
     "@tailwindcss/postcss": "^4",
     "@types/node": "^20",
     "@types/react": "^19",

@@ -1,0 +1,36 @@
+{
+  "version": 3,
+  "middleware": {},
+  "functions": {
+    "/[alias]/page": {
+      "files": [
+        "server/server-reference-manifest.js",
+        "server/app/[alias]/page_client-reference-manifest.js",
+        "server/middleware-build-manifest.js",
+        "server/middleware-react-loadable-manifest.js",
+        "server/next-font-manifest.js",
+        "server/interception-route-rewrite-manifest.js",
+        "server/edge-runtime-webpack.js",
+        "server/app/[alias]/page.js"
+      ],
+      "name": "app/[alias]/page",
+      "page": "/[alias]/page",
+      "matchers": [
+        {
+          "regexp": "^/(?<alias>[^/]+?)$",
+          "originalSource": "/[alias]"
+        }
+      ],
+      "wasm": [],
+      "assets": [],
+      "env": {
+        "__NEXT_BUILD_ID": "development",
+        "NEXT_SERVER_ACTIONS_ENCRYPTION_KEY": "+sh67eqqi9xy19Vjsh43WVhSbidP3kBz1gAHKFqpuCA=",
+        "__NEXT_PREVIEW_MODE_ID": "890226755fdec6f7374355deecd868b8",
+        "__NEXT_PREVIEW_MODE_SIGNING_KEY": "620f6d6357409641dadf0a1e3c35e25fc4f0c3a0ee82a39e73864d6bada22e7c",
+        "__NEXT_PREVIEW_MODE_ENCRYPTION_KEY": "55016cecd1146e826ed2259893267ea13455b585e3581be7928807a19532a022"
+      }
+    }
+  },
+  "sortedMiddleware": []
+}
