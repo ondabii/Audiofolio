@@ -82,7 +82,7 @@ export function TrackItem({ track, readOnly = false }: { track: any; readOnly?: 
       {/* 버전 목록 */}
       <div className="flex flex-col">
         {versions.map((version: any) => {
-          const isRep = version.is_representative;
+          const isRep = version.is_representative === true || version.is_representative === 1;
           const isCurrent = playingVersionId === version.id;
           const vState = versionStates[version.id];
 

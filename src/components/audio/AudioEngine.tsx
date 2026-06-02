@@ -44,8 +44,22 @@ export function AudioEngine({ trackVersions = [] }: { trackVersions: any[] }) {
     updateVersionState(version.id, { isReady: false });
     
     try {
-      const audioUrl = version.public_url || '/placeholder.mp3'; // Fallback for local testing
+      // R2 Custom Domain은 CORS 헤더를 반환하지 않으므로
+      // Next.js API 프록시(/api/audio-url)를 통해 우회
+      const audioKey = version.audio_url;
+      const audioUrl = audioKey
+        ? `/api/audio-url?key=${encodeURIComponent(audioKey)}`
+        : (version.public_url || null);
+      
+      if (!audioUrl) {
+        console.warn('오디오 URL 없음:', version.id);
+        return null;
+      }
+
       const response = await fetch(audioUrl);
+      if (!response.ok) {
+        throw new Error(`HTTP ${response.status}: ${response.statusText}`);
+      }
       const arrayBuffer = await response.arrayBuffer();
       const decodedData = await audioCtxRef.current.decodeAudioData(arrayBuffer);
       
@@ -55,6 +69,7 @@ export function AudioEngine({ trackVersions = [] }: { trackVersions: any[] }) {
       return decodedData;
     } catch (e) {
       console.error('Failed to decode audio for version:', version.id, e);
+      updateVersionState(version.id, { isReady: false });
       return null;
     }
   };

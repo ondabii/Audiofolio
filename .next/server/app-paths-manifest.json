@@ -1,3 +1,13 @@
 {
+  "/_not-found/page": "app/_not-found/page.js",
+  "/favicon.ico/route": "app/favicon.ico/route.js",
+  "/api/projects/[alias]/route": "app/api/projects/[alias]/route.js",
+  "/api/upload/route": "app/api/upload/route.js",
+  "/api/versions/[id]/route": "app/api/versions/[id]/route.js",
+  "/api/audio-url/route": "app/api/audio-url/route.js",
+  "/api/actions/route": "app/api/actions/route.js",
+  "/admin/page": "app/admin/page.js",
+  "/admin/[alias]/page": "app/admin/[alias]/page.js",
+  "/page": "app/page.js",
   "/[alias]/page": "app/[alias]/page.js"
 }

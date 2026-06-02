@@ -31,7 +31,9 @@ export async function GET(request: NextRequest) {
   } catch (e) {}
 
   const R2_PUBLIC_URL = env.R2_PUBLIC_URL || process.env.R2_PUBLIC_URL || 'https://afc.ondabii.com';
-  const audioUrl = `${R2_PUBLIC_URL}/${key}`;
+  // key는 audio_url 원본값(예: "tracks/xxx/파일명 with spaces.ogg") — 세그먼트별 인코딩
+  const encodedKey = key.split('/').map((seg: string) => encodeURIComponent(seg)).join('/');
+  const audioUrl = `${R2_PUBLIC_URL}/${encodedKey}`;
 
   try {
     const upstream = await fetch(audioUrl, {

@@ -146,7 +146,11 @@ export async function getProjectData(alias: string) {
           ...t,
           versions: (versions || []).filter((v: any) => v.track_id === t.id).map((v: any) => ({
             ...v,
-            public_url: R2_PUBLIC_URL ? `${R2_PUBLIC_URL}/${v.audio_url}` : v.audio_url
+            is_representative: v.is_representative === 1 || v.is_representative === true,
+            is_visible: v.is_visible === 1 || v.is_visible === true,
+            public_url: R2_PUBLIC_URL
+              ? `${R2_PUBLIC_URL}/${v.audio_url.split('/').map((seg: string) => encodeURIComponent(seg)).join('/')}`
+              : v.audio_url
           }))
         }))
       }))

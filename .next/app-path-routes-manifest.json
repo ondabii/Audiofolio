@@ -1,0 +1,13 @@
+{
+  "/_not-found/page": "/_not-found",
+  "/favicon.ico/route": "/favicon.ico",
+  "/api/projects/[alias]/route": "/api/projects/[alias]",
+  "/api/upload/route": "/api/upload",
+  "/api/versions/[id]/route": "/api/versions/[id]",
+  "/api/audio-url/route": "/api/audio-url",
+  "/api/actions/route": "/api/actions",
+  "/admin/page": "/admin",
+  "/admin/[alias]/page": "/admin/[alias]",
+  "/page": "/",
+  "/[alias]/page": "/[alias]"
+}
