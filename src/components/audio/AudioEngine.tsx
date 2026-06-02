@@ -3,226 +3,203 @@
 import { useEffect, useRef, useCallback } from 'react';
 import { useAudioStore } from '@/store/audioStore';
 
-// Web Audio API 기반 병렬 디코딩 캐시
+// 모듈 레벨 캐시 (컴포넌트 리렌더 시 유지)
 const audioBufferCache = new Map<string, AudioBuffer>();
 
 export function AudioEngine({ trackVersions = [] }: { trackVersions: any[] }) {
   const { playingVersionId, isPlaying, updateVersionState, setGlobalCurrentTime } = useAudioStore();
-  
+
   const audioCtxRef = useRef<AudioContext | null>(null);
   const sourceNodesRef = useRef<Map<string, AudioBufferSourceNode>>(new Map());
   const gainNodesRef = useRef<Map<string, GainNode>>(new Map());
   const startTimeRef = useRef<number>(0);
   const pauseTimeRef = useRef<number>(0);
   const animationFrameRef = useRef<number>(0);
+  // 버퍼 로드가 끝나면 재생해야 할 버전 ID를 임시 저장
+  const pendingPlayIdRef = useRef<string | null>(null);
 
-  // 초기화
+  // 언마운트 시 정리
   useEffect(() => {
-    if (!audioCtxRef.current) {
-      audioCtxRef.current = new (window.AudioContext || (window as any).webkitAudioContext)();
-    }
-    
     return () => {
       cancelAnimationFrame(animationFrameRef.current);
-      sourceNodesRef.current.forEach(node => {
-        try { node.stop(); } catch(e){}
-      });
+      sourceNodesRef.current.forEach(node => { try { node.stop(); } catch (e) {} });
       if (audioCtxRef.current?.state !== 'closed') {
         audioCtxRef.current?.close();
       }
     };
   }, []);
 
-  // 오디오 로드 및 디코딩 함수
-  const loadAndDecodeAudio = async (version: any) => {
-    if (!audioCtxRef.current) return;
-    if (audioBufferCache.has(version.id)) {
-      updateVersionState(version.id, { isReady: true, durationMs: audioBufferCache.get(version.id)!.duration * 1000 });
-      return audioBufferCache.get(version.id);
+  // AudioContext lazy init — 브라우저 autoplay 정책: user gesture 이후에만 생성
+  const getAudioCtx = useCallback((): AudioContext => {
+    if (!audioCtxRef.current) {
+      audioCtxRef.current = new (window.AudioContext || (window as any).webkitAudioContext)();
     }
-    
-    updateVersionState(version.id, { isReady: false });
-    
-    try {
-      // R2 Custom Domain은 CORS 헤더를 반환하지 않으므로
-      // Next.js API 프록시(/api/audio-url)를 통해 우회
-      const audioKey = version.audio_url;
-      const audioUrl = audioKey
-        ? `/api/audio-url?key=${encodeURIComponent(audioKey)}`
-        : (version.public_url || null);
-      
-      if (!audioUrl) {
-        console.warn('오디오 URL 없음:', version.id);
-        return null;
-      }
+    return audioCtxRef.current;
+  }, []);
 
-      const response = await fetch(audioUrl);
-      if (!response.ok) {
-        throw new Error(`HTTP ${response.status}: ${response.statusText}`);
+  // ─── 재생 동기화 루프 ───
+  const syncLoop = useCallback(() => {
+    const store = useAudioStore.getState();
+    const ctx = audioCtxRef.current;
+    if (!ctx || !store.playingVersionId || !store.isPlaying) return;
+
+    const buf = audioBufferCache.get(store.playingVersionId);
+    if (buf) {
+      const elapsed = ctx.currentTime - startTimeRef.current;
+      setGlobalCurrentTime(elapsed % buf.duration);
+    }
+    animationFrameRef.current = requestAnimationFrame(syncLoop);
+  }, [setGlobalCurrentTime]);
+
+  // ─── 실제 재생 시작 (분리된 함수) ───
+  const startPlayback = useCallback((versionId: string, offset: number = 0) => {
+    const ctx = getAudioCtx();
+    const buf = audioBufferCache.get(versionId);
+    if (!ctx || !buf) return;
+
+    // 기존 재생 중 노드 전부 정리
+    cancelAnimationFrame(animationFrameRef.current);
+    sourceNodesRef.current.forEach(node => { try { node.stop(); } catch (e) {} });
+    sourceNodesRef.current.clear();
+    gainNodesRef.current.clear();
+
+    if (ctx.state === 'suspended') ctx.resume();
+
+    const sourceNode = ctx.createBufferSource();
+    sourceNode.buffer = buf;
+    sourceNode.loop = true;
+
+    const gainNode = ctx.createGain();
+    gainNode.gain.value = 1;
+    sourceNode.connect(gainNode);
+    gainNode.connect(ctx.destination);
+
+    const safeOffset = offset % buf.duration;
+    sourceNode.start(0, safeOffset);
+    startTimeRef.current = ctx.currentTime - safeOffset;
+
+    sourceNodesRef.current.set(versionId, sourceNode);
+    gainNodesRef.current.set(versionId, gainNode);
+
+    animationFrameRef.current = requestAnimationFrame(syncLoop);
+  }, [getAudioCtx, syncLoop]);
+
+  // ─── 오디오 로드 & 디코딩 ───
+  const loadAndDecodeAudio = useCallback(async (version: any): Promise<AudioBuffer | null> => {
+    if (!version?.id || !version?.audio_url) return null;
+
+    // 캐시 히트
+    if (audioBufferCache.has(version.id)) {
+      const cached = audioBufferCache.get(version.id)!;
+      updateVersionState(version.id, { isReady: true, durationMs: cached.duration * 1000 });
+
+      // 재생 대기 중이었다면 즉시 재생
+      if (pendingPlayIdRef.current === version.id) {
+        pendingPlayIdRef.current = null;
+        if (useAudioStore.getState().isPlaying) {
+          startPlayback(version.id, pauseTimeRef.current);
+        }
       }
+      return cached;
+    }
+
+    updateVersionState(version.id, { isReady: false });
+
+    try {
+      // 서버 프록시를 통해 CORS 없이 R2 오디오 로드
+      const audioUrl = `/api/audio-url?key=${encodeURIComponent(version.audio_url)}`;
+      const response = await fetch(audioUrl);
+      if (!response.ok) throw new Error(`HTTP ${response.status}: ${response.statusText}`);
+
       const arrayBuffer = await response.arrayBuffer();
-      const decodedData = await audioCtxRef.current.decodeAudioData(arrayBuffer);
-      
+      const ctx = getAudioCtx();
+      const decodedData = await ctx.decodeAudioData(arrayBuffer);
+
       audioBufferCache.set(version.id, decodedData);
       updateVersionState(version.id, { isReady: true, durationMs: decodedData.duration * 1000 });
-      
+
+      // 로드 완료 — 재생 대기 중이었다면 즉시 재생
+      if (pendingPlayIdRef.current === version.id) {
+        pendingPlayIdRef.current = null;
+        if (useAudioStore.getState().isPlaying) {
+          startPlayback(version.id, pauseTimeRef.current);
+        }
+      }
+
       return decodedData;
     } catch (e) {
-      console.error('Failed to decode audio for version:', version.id, e);
+      console.error('[AudioEngine] 오디오 디코딩 실패:', version.id, e);
       updateVersionState(version.id, { isReady: false });
       return null;
     }
-  };
+  }, [updateVersionState, getAudioCtx, startPlayback]);
 
-  // N-1, N+1 큐잉 로직
+  // ─── playingVersionId 변경 시: N, N+1, N-1 순차 버퍼링 ───
   useEffect(() => {
     if (!playingVersionId) return;
 
-    // 현재 재생 중인 버전이 속한 트랙 찾기
-    const currentTrackVersions = trackVersions.filter(v => 
-      v.track_id === trackVersions.find(tv => tv.id === playingVersionId)?.track_id
-    ).sort((a, b) => a.order_index - b.order_index);
+    const currentTrack = trackVersions.find(v => v.id === playingVersionId);
+    const trackSiblings = trackVersions
+      .filter(v => v.track_id === currentTrack?.track_id)
+      .sort((a, b) => a.order_index - b.order_index);
 
-    if (currentTrackVersions.length === 0) return;
+    const idx = trackSiblings.findIndex(v => v.id === playingVersionId);
+    if (idx === -1) return;
 
-    const currentIndex = currentTrackVersions.findIndex(v => v.id === playingVersionId);
-    
-    // N (현재) 우선 로딩
-    loadAndDecodeAudio(currentTrackVersions[currentIndex]).then(() => {
-      // 로드 완료 후 N+1, N-1 순차 로딩 (병렬로 넘기지 않고 순차 처리하여 네트워크 최적화)
-      const loadNeighbors = async () => {
-        // N+1
-        if (currentIndex + 1 < currentTrackVersions.length) {
-          await loadAndDecodeAudio(currentTrackVersions[currentIndex + 1]);
-        }
-        // N-1
-        if (currentIndex - 1 >= 0) {
-          await loadAndDecodeAudio(currentTrackVersions[currentIndex - 1]);
-        }
+    // N 우선 로드
+    loadAndDecodeAudio(trackSiblings[idx]).then(() => {
+      // N+1, N-1 순차 사전 로드
+      const preload = async () => {
+        if (idx + 1 < trackSiblings.length) await loadAndDecodeAudio(trackSiblings[idx + 1]);
+        if (idx - 1 >= 0) await loadAndDecodeAudio(trackSiblings[idx - 1]);
       };
-      loadNeighbors();
+      preload();
     });
+  }, [playingVersionId]); // eslint-disable-line react-hooks/exhaustive-deps
 
-  }, [playingVersionId, trackVersions, updateVersionState]);
-
-  // 재생 동기화 관리 루프
-  const syncLoop = useCallback(() => {
-    if (!audioCtxRef.current || !playingVersionId || !isPlaying) return;
-
-    const ctx = audioCtxRef.current;
-    const currentBuffer = audioBufferCache.get(playingVersionId);
-    
-    if (currentBuffer) {
-      // 재생 경과 시간 계산
-      const elapsed = ctx.currentTime - startTimeRef.current;
-      const currentPos = elapsed % currentBuffer.duration;
-      
-      setGlobalCurrentTime(currentPos);
-    }
-    
-    animationFrameRef.current = requestAnimationFrame(syncLoop);
-  }, [playingVersionId, isPlaying, setGlobalCurrentTime]);
-
-  // Seek(탐색) 처리
+  // ─── Seek 처리 ───
   const { seekRequestTime, clearSeekRequest } = useAudioStore();
-  
+
   useEffect(() => {
-    if (seekRequestTime !== null && isPlaying && playingVersionId) {
-      const ctx = audioCtxRef.current;
-      const targetBuffer = audioBufferCache.get(playingVersionId);
-      if (ctx && targetBuffer) {
-        // 기존 재생 중지
-        sourceNodesRef.current.forEach(node => {
-          try { node.stop(); } catch(e){}
-        });
-        sourceNodesRef.current.clear();
-        gainNodesRef.current.clear();
+    if (seekRequestTime === null || !isPlaying || !playingVersionId) return;
 
-        const offset = seekRequestTime % targetBuffer.duration;
-        pauseTimeRef.current = offset;
-
-        // 새 소스 노드로 재시작
-        const sourceNode = ctx.createBufferSource();
-        sourceNode.buffer = targetBuffer;
-        sourceNode.loop = true;
-
-        const gainNode = ctx.createGain();
-        gainNode.gain.value = 1;
-
-        sourceNode.connect(gainNode);
-        gainNode.connect(ctx.destination);
-
-        sourceNode.start(0, offset);
-        startTimeRef.current = ctx.currentTime - offset;
-
-        sourceNodesRef.current.set(playingVersionId, sourceNode);
-        gainNodesRef.current.set(playingVersionId, gainNode);
-        
-        clearSeekRequest();
-      }
+    const buf = audioBufferCache.get(playingVersionId);
+    if (buf) {
+      const offset = seekRequestTime % buf.duration;
+      pauseTimeRef.current = offset;
+      startPlayback(playingVersionId, offset);
+      clearSeekRequest();
     }
-  }, [seekRequestTime, isPlaying, playingVersionId, clearSeekRequest]);
+  }, [seekRequestTime, isPlaying, playingVersionId, startPlayback, clearSeekRequest]);
 
-  // 재생/정지/크로스페이드 처리
+  // ─── 재생 / 일시정지 처리 ───
   useEffect(() => {
-    // Seek 요청 중일 때는 일반 재생 로직이 간섭하지 않도록 방어
+    // Seek 처리 중이면 간섭 방지
     if (useAudioStore.getState().seekRequestTime !== null) return;
 
-    const ctx = audioCtxRef.current;
-    if (!ctx) return;
-
-    if (isPlaying && ctx.state === 'suspended') {
-      ctx.resume();
-    }
-
-    if (isPlaying) {
-      // 모든 재생 중인 노드 정리 (MVP: 새로 Source Node를 만들어 스케줄링)
-      sourceNodesRef.current.forEach(node => {
-        try { node.stop(); } catch(e){}
-      });
-      sourceNodesRef.current.clear();
-      gainNodesRef.current.clear();
-
-      const targetBuffer = audioBufferCache.get(playingVersionId || '');
-      if (!targetBuffer) {
-        return;
+    if (isPlaying && playingVersionId) {
+      const buf = audioBufferCache.get(playingVersionId);
+      if (buf) {
+        // 버퍼 준비 완료 → 즉시 재생
+        startPlayback(playingVersionId, pauseTimeRef.current);
+      } else {
+        // 버퍼 아직 로드 중 → 완료 시 자동 재생 예약
+        pendingPlayIdRef.current = playingVersionId;
       }
-
-      const sourceNode = ctx.createBufferSource();
-      sourceNode.buffer = targetBuffer;
-      sourceNode.loop = true; // Gapless Loop 지원
-
-      const gainNode = ctx.createGain();
-      gainNode.gain.value = 1;
-
-      sourceNode.connect(gainNode);
-      gainNode.connect(ctx.destination);
-
-      const offset = pauseTimeRef.current % targetBuffer.duration;
-      sourceNode.start(0, offset);
-
-      startTimeRef.current = ctx.currentTime - offset;
-      
-      sourceNodesRef.current.set(playingVersionId!, sourceNode);
-      gainNodesRef.current.set(playingVersionId!, gainNode);
-
-      animationFrameRef.current = requestAnimationFrame(syncLoop);
-      
     } else {
-      // 일시 정지 처리
+      // 일시정지
       cancelAnimationFrame(animationFrameRef.current);
-      if (playingVersionId && audioBufferCache.has(playingVersionId)) {
-        const buffer = audioBufferCache.get(playingVersionId)!;
+      const ctx = audioCtxRef.current;
+      if (ctx && playingVersionId && audioBufferCache.has(playingVersionId)) {
+        const buf = audioBufferCache.get(playingVersionId)!;
         const elapsed = ctx.currentTime - startTimeRef.current;
-        pauseTimeRef.current = elapsed % buffer.duration;
+        pauseTimeRef.current = elapsed % buf.duration;
       }
-      
-      sourceNodesRef.current.forEach(node => {
-        try { node.stop(); } catch(e){}
-      });
+      sourceNodesRef.current.forEach(node => { try { node.stop(); } catch (e) {} });
       sourceNodesRef.current.clear();
+      pendingPlayIdRef.current = null;
     }
-  }, [isPlaying, playingVersionId, syncLoop]);
+  }, [isPlaying, playingVersionId, startPlayback]);
 
   return null;
 }

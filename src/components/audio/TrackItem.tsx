@@ -119,6 +119,17 @@ export function TrackItem({ track, readOnly = false }: { track: any; readOnly?: 
           // 대표 버전 높이: h-16(64px), 일반 버전: h-10(40px)
           const rowHeight = isRep ? 'h-16' : 'h-10';
 
+          // waveform_data 파싱: DB에 JSON 문자열로 저장된 0~100 사이 숫자 배열
+          let waveformBars: number[] = [];
+          try {
+            if (version.waveform_data) {
+              const parsed = typeof version.waveform_data === 'string'
+                ? JSON.parse(version.waveform_data)
+                : version.waveform_data;
+              if (Array.isArray(parsed)) waveformBars = parsed;
+            }
+          } catch (e) {}
+
           return (
             <div
               key={version.id}
@@ -202,6 +213,24 @@ export function TrackItem({ track, readOnly = false }: { track: any; readOnly?: 
 
                   {/* 버퍼링 스트라이프 */}
                   {!isReady && <div className="absolute inset-0 bg-stripes animate-pulse z-0" />}
+
+                  {/* 파형 막대 시각화 */}
+                  {waveformBars.length > 0 && (
+                    <div className="absolute inset-0 flex items-end px-0 z-[1] pointer-events-none" style={{ gap: '1px' }}>
+                      {waveformBars.map((val, i) => (
+                        <div
+                          key={i}
+                          className="flex-1 rounded-[1px] origin-bottom"
+                          style={{
+                            height: `${Math.max(8, (val / 100) * 85)}%`,
+                            backgroundColor: isRep
+                              ? `rgba(245, 166, 35, ${isPlayingTrack ? 0.55 : 0.3})`
+                              : `rgba(255, 255, 255, ${isPlayingTrack ? 0.15 : 0.08})`,
+                          }}
+                        />
+                      ))}
+                    </div>
+                  )}
 
                   {/* 포맷/비트레이트 뱃지 */}
                   <div className="absolute right-1 bottom-1 flex gap-1 z-10">
