@@ -2,6 +2,7 @@
 
 import { useEffect, useRef, useCallback } from 'react';
 import { useAudioStore } from '@/store/audioStore';
+import { getAudioContext } from '@/lib/audioContext';
 
 // 모듈 레벨 캐시 (컴포넌트 리렌더 시 유지)
 const audioBufferCache = new Map<string, AudioBuffer>();
@@ -9,7 +10,7 @@ const audioBufferCache = new Map<string, AudioBuffer>();
 export function AudioEngine({ trackVersions = [] }: { trackVersions: any[] }) {
   const { playingVersionId, isPlaying, updateVersionState, setGlobalCurrentTime } = useAudioStore();
 
-  const audioCtxRef = useRef<AudioContext | null>(null);
+  const audioCtxRef = { current: null as AudioContext | null }; // 싱글톤 래퍼 (하위 호환용)
   const sourceNodesRef = useRef<Map<string, AudioBufferSourceNode>>(new Map());
   const gainNodesRef = useRef<Map<string, GainNode>>(new Map());
   const startTimeRef = useRef<number>(0);
@@ -23,18 +24,14 @@ export function AudioEngine({ trackVersions = [] }: { trackVersions: any[] }) {
     return () => {
       cancelAnimationFrame(animationFrameRef.current);
       sourceNodesRef.current.forEach(node => { try { node.stop(); } catch (e) {} });
-      if (audioCtxRef.current?.state !== 'closed') {
-        audioCtxRef.current?.close();
-      }
+      // 싱글톤 AudioContext는 페이지 전체에서 공유하므로 여기서 닫지 않음
     };
   }, []);
 
   // AudioContext lazy init — 브라우저 autoplay 정책: user gesture 이후에만 생성
+  // TrackItem의 클릭 핸들러에서 initAudioContext()를 먼저 호출하므로 여기선 getAudioContext()만 사용
   const getAudioCtx = useCallback((): AudioContext => {
-    if (!audioCtxRef.current) {
-      audioCtxRef.current = new (window.AudioContext || (window as any).webkitAudioContext)();
-    }
-    return audioCtxRef.current;
+    return getAudioContext();
   }, []);
 
   // ─── 재생 동기화 루프 ───

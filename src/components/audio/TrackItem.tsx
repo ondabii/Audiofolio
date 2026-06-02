@@ -4,6 +4,7 @@ import { Play, Pause, Headphones, Loader } from 'lucide-react';
 import { useAudioStore } from '@/store/audioStore';
 import { useProjectStore } from '@/store/projectStore';
 import { InlineEditor } from '@/components/admin/InlineEditor';
+import { initAudioContext } from '@/lib/audioContext';
 
 export function TrackItem({ track, readOnly = false }: { track: any; readOnly?: boolean }) {
   // ✅ 훅은 조건 없이 컴포넌트 최상위에서만 호출
@@ -21,6 +22,9 @@ export function TrackItem({ track, readOnly = false }: { track: any; readOnly?: 
 
   // 버전 재생/정지 토글
   const handlePlayToggle = (versionId: string) => {
+    // ★ user gesture 콘텍스트 안에서 AudioContext 즉시 초기화/재개
+    // Safari는 useEffect 등 비동기 콘텍스트에서는 AudioContext를 차단함
+    initAudioContext();
     if (playingVersionId === versionId) {
       setIsPlaying(!isPlaying);
     } else {
@@ -216,7 +220,7 @@ export function TrackItem({ track, readOnly = false }: { track: any; readOnly?: 
 
                   {/* 파형 막대 시각화 */}
                   {waveformBars.length > 0 && (
-                    <div className="absolute inset-0 flex items-end px-0 z-[1] pointer-events-none" style={{ gap: '1px' }}>
+                    <div className="absolute inset-0 flex items-center px-0 z-[1] pointer-events-none" style={{ gap: '1px' }}>
                       {waveformBars.map((val, i) => (
                         <div
                           key={i}

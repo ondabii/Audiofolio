@@ -107,8 +107,9 @@ export function AdminTrackDetail({ track, projectId }: AdminTrackDetailProps) {
       
       const versionId = crypto.randomUUID();
       const fileName = encodeURIComponent(file.name);
-      // R2 direct upload presigned URL을 받아와서 업로드하기 위한 파라미터 구성
-      const url = `/api/upload?trackId=${track.id}&versionId=${versionId}&fileName=${fileName}&durationMs=${meta.durationMs}&fileSizeBytes=${meta.sizeBytes}&bitrate=${meta.bitrateKbps}`;
+      // 파형 데이터를 JSON으로 직렬화해 쿼리 파라미터로 전달
+      const waveformParam = encodeURIComponent(JSON.stringify(meta.waveformData));
+      const url = `/api/upload?trackId=${track.id}&versionId=${versionId}&fileName=${fileName}&durationMs=${meta.durationMs}&fileSizeBytes=${meta.sizeBytes}&bitrate=${meta.bitrateKbps}&waveformData=${waveformParam}`;
 
       setUploadText(`R2 직접 업로드 중: ${file.name}...`);
       
