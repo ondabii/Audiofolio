@@ -50,10 +50,13 @@ export async function GET(request: NextRequest) {
       );
     }
 
+    // Edge Runtime에서 스트림 응답 시 Content-Length를 임의로 누락하고 transfer-encoding: chunked로 강제 변환하는 문제를 방지하기 위해 ArrayBuffer로 로드
+    const buffer = await upstream.arrayBuffer();
+
     // 응답 헤더 복사 + CORS 추가
     const responseHeaders = new Headers();
     responseHeaders.set('Content-Type', upstream.headers.get('Content-Type') || 'audio/ogg');
-    responseHeaders.set('Content-Length', upstream.headers.get('Content-Length') || '');
+    responseHeaders.set('Content-Length', buffer.byteLength.toString());
     responseHeaders.set('Accept-Ranges', 'bytes');
     responseHeaders.set('Cache-Control', 'public, max-age=86400'); // 24시간 캐시
     responseHeaders.set('Access-Control-Allow-Origin', '*');
@@ -63,7 +66,7 @@ export async function GET(request: NextRequest) {
       responseHeaders.set('Content-Range', upstream.headers.get('Content-Range')!);
     }
 
-    return new NextResponse(upstream.body, {
+    return new NextResponse(buffer, {
       status: upstream.status,
       headers: responseHeaders,
     });

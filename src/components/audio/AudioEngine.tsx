@@ -39,76 +39,83 @@ export function AudioEngine({ trackVersions = [] }: { trackVersions: any[] }) {
     rafRef.current = requestAnimationFrame(tick);
   }, [stopSync, setGlobalCurrentTime]);
 
-  // ─── 언마운트 정리 ───
+  // ─── 오디오 객체 생성 및 상시 리스너 바인딩 ───
   useEffect(() => {
-    return () => {
-      stopSync();
-      if (audioRef.current) {
-        audioRef.current.pause();
-        audioRef.current.src = '';
-        audioRef.current = null;
-      }
-    };
-  }, [stopSync]);
-
-  // ─── playingVersionId 변경 시 오디오 소스 교체 ───
-  useEffect(() => {
-    if (!playingVersionId) return;
-
-    const version = trackVersions.find((v: any) => v.id === playingVersionId);
-    if (!version?.audio_url) return;
-
-    // 이미 같은 버전이면 스킵
-    if (loadedVersionIdRef.current === playingVersionId) return;
-    loadedVersionIdRef.current = playingVersionId;
-
-    // <audio> 엘리먼트 생성 또는 재사용
-    if (!audioRef.current) {
-      audioRef.current = new Audio();
-    }
-    const audio = audioRef.current;
+    const audio = new Audio();
     audio.loop = true;
     audio.preload = 'auto';
+    audioRef.current = audio;
 
-    // 이전 소스 정리
-    stopSync();
-    audio.pause();
-
-    const audioUrl = `/api/audio-url?key=${encodeURIComponent(version.audio_url)}`;
-    updateVersionState(playingVersionId, { isReady: false });
-
-    audio.src = audioUrl;
-    audio.load();
-
-    // 재생 가능 상태가 되면
     const onCanPlay = () => {
-      // DB duration_ms 우선 사용, 없으면 audio.duration
-      const durationMs = version.duration_ms > 0
+      const currentId = useAudioStore.getState().playingVersionId;
+      if (!currentId) return;
+
+      const version = trackVersions.find((v: any) => v.id === currentId);
+      const durationMs = (version?.duration_ms > 0)
         ? version.duration_ms
         : Math.round(audio.duration * 1000);
 
-      updateVersionState(playingVersionId, { isReady: true, durationMs });
+      updateVersionState(currentId, { isReady: true, durationMs });
 
+      // 현재 재생 중이면 재생 처리
       const store = useAudioStore.getState();
-      if (store.isPlaying && store.playingVersionId === playingVersionId) {
+      if (store.isPlaying && store.playingVersionId === currentId) {
         audio.play()
           .then(() => startSync())
-          .catch(err => console.error('[AudioEngine] 재생 실패:', err));
+          .catch(err => console.error('[AudioEngine] onCanPlay 재생 실패:', err));
       }
     };
 
     const onError = () => {
-      console.error('[AudioEngine] 오디오 로드 오류:', audio.src);
-      updateVersionState(playingVersionId, { isReady: false });
+      const currentId = useAudioStore.getState().playingVersionId;
+      if (currentId) {
+        console.error('[AudioEngine] 오디오 로드 오류:', audio.src);
+        updateVersionState(currentId, { isReady: false });
+      }
     };
 
-    // 기존 리스너 제거 후 새로 등록
-    audio.removeEventListener('canplay', onCanPlay);
-    audio.removeEventListener('error', onError);
-    audio.addEventListener('canplay', onCanPlay, { once: true });
-    audio.addEventListener('error', onError, { once: true });
+    audio.addEventListener('canplay', onCanPlay);
+    audio.addEventListener('error', onError);
 
-  }, [playingVersionId, trackVersions, updateVersionState, startSync, stopSync]);
+    return () => {
+      stopSync();
+      audio.removeEventListener('canplay', onCanPlay);
+      audio.removeEventListener('error', onError);
+      audio.pause();
+      audio.src = '';
+      audioRef.current = null;
+    };
+  }, [trackVersions, updateVersionState, startSync, stopSync]);
+
+  // ─── playingVersionId 변경 시 오디오 소스 교체 ───
+  useEffect(() => {
+    const audio = audioRef.current;
+    if (!audio) return;
+
+    if (!playingVersionId) {
+      audio.pause();
+      audio.src = '';
+      loadedVersionIdRef.current = null;
+      stopSync();
+      return;
+    }
+
+    // 이미 같은 버전이 로드되어 있으면 스킵
+    if (loadedVersionIdRef.current === playingVersionId) {
+      return;
+    }
+    loadedVersionIdRef.current = playingVersionId;
+
+    const version = trackVersions.find((v: any) => v.id === playingVersionId);
+    if (!version?.audio_url) return;
+
+    stopSync();
+    audio.pause();
+
+    updateVersionState(playingVersionId, { isReady: false });
+    audio.src = `/api/audio-url?key=${encodeURIComponent(version.audio_url)}`;
+    audio.load();
+  }, [playingVersionId, trackVersions, updateVersionState, stopSync]);
 
   // ─── isPlaying 변경 처리 ───
   useEffect(() => {
@@ -116,18 +123,21 @@ export function AudioEngine({ trackVersions = [] }: { trackVersions: any[] }) {
     if (!audio || !playingVersionId) return;
 
     if (isPlaying) {
+      // readyState가 2(HAVE_CURRENT_DATA) 이상이면 즉시 재생 가능
       if (audio.readyState >= 2) {
-        // 버퍼 준비됨 → 즉시 재생
         audio.play()
           .then(() => startSync())
-          .catch(err => console.error('[AudioEngine] 재생 실패:', err));
+          .catch(err => console.error('[AudioEngine] isPlaying 재생 실패:', err));
+      } else {
+        // readyState가 부족하면 로딩 상태로 두고 load() 트리거하여 canplay 리스너 유도
+        updateVersionState(playingVersionId, { isReady: false });
+        audio.load();
       }
-      // readyState < 2 이면 canplay 이벤트에서 재생 처리
     } else {
       audio.pause();
       stopSync();
     }
-  }, [isPlaying, playingVersionId, startSync, stopSync]);
+  }, [isPlaying, playingVersionId, startSync, stopSync, updateVersionState]);
 
   // ─── Seek 처리 ───
   useEffect(() => {
