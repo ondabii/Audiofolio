@@ -6,11 +6,10 @@ import { useProjectStore } from '@/store/projectStore';
 import { InlineEditor } from '@/components/admin/InlineEditor';
 
 export function TrackItem({ track, readOnly = false }: { track: any; readOnly?: boolean }) {
-  // ✅ 훅은 조건 없이 컴포넌트 최상위에서만 호출
+  // ✅ 부모는 더 이상 globalCurrentTime을 직접 구독하지 않음 (리렌더링 최소화)
   const playingVersionId = useAudioStore(state => state.playingVersionId);
   const isPlaying = useAudioStore(state => state.isPlaying);
   const versionStates = useAudioStore(state => state.versionStates);
-  const globalCurrentTime = useAudioStore(state => state.globalCurrentTime);
   const setPlayingVersionId = useAudioStore(state => state.setPlayingVersionId);
   const setIsPlaying = useAudioStore(state => state.setIsPlaying);
 
@@ -48,9 +47,6 @@ export function TrackItem({ track, readOnly = false }: { track: any; readOnly?: 
     });
   };
 
-  // ──────────────────────────────────────────────
-  // 재생 시간 계산 (스펙트럼 비율 기준)
-  // ──────────────────────────────────────────────
   const versions: any[] = track.versions ?? [];
 
   // 각 버전 별 실제 재생 길이(초) 결정 함수
@@ -63,8 +59,6 @@ export function TrackItem({ track, readOnly = false }: { track: any; readOnly?: 
 
   // 트랙 내 최대 재생 길이 (스펙트럼 100% 기준)
   const maxDuration = versions.reduce((max, v) => Math.max(max, getVersionDuration(v)), 0);
-
-  // 총 표시 시간: 최대 길이 버전 기준
   const totalDisplayDuration = maxDuration;
 
   return (
@@ -88,47 +82,8 @@ export function TrackItem({ track, readOnly = false }: { track: any; readOnly?: 
 
           // 버퍼 준비 여부: 이 트랙이 재생 중일 때만 로딩 상태 표시
           const isReady = isPlayingTrack && vState ? vState.isReady : true;
-
           const versionDuration = getVersionDuration(version);
-
-          // 스펙트럼 너비 비율 (maxDuration 대비)
-          const spectrumWidthPercent =
-            maxDuration > 0 && versionDuration > 0
-              ? Math.min((versionDuration / maxDuration) * 100, 100)
-              : 100;
-
-          // 재생 진행 퍼센트:
-          // - 현재 재생 중인 버전이면 isCurrent 기반
-          // - 이 트랙이 재생 중이지만 다른 버전이면, 해당 버전 길이 내에서 globalCurrentTime 진행률
-          let progressPercent = 0;
-          if (isPlayingTrack && isPlaying && versionDuration > 0) {
-            // 이 버전의 길이를 초과하면 loop 처리 (짧은 버전은 0으로 wrap-around)
-            const localTime = globalCurrentTime % versionDuration;
-            progressPercent = Math.min((localTime / versionDuration) * 100, 100);
-          } else if (isCurrent && versionDuration > 0) {
-            progressPercent = Math.min((globalCurrentTime / versionDuration) * 100, 100);
-          }
-
-          // 재생선(Playhead) 위치: 스펙트럼 너비 내에서의 비율
-          // globalCurrentTime이 maxDuration 기준으로 스펙트럼 전체에서 어느 위치인지
-          const playheadPercent =
-            maxDuration > 0 && isPlayingTrack
-              ? Math.min((globalCurrentTime / maxDuration) * 100, 100)
-              : 0;
-
-          // 대표 버전 높이: h-16(64px), 일반 버전: h-10(40px)
           const rowHeight = isRep ? 'h-16' : 'h-10';
-
-          // waveform_data 파싱: DB에 JSON 문자열로 저장된 0~100 사이 숫자 배열
-          let waveformBars: number[] = [];
-          try {
-            if (version.waveform_data) {
-              const parsed = typeof version.waveform_data === 'string'
-                ? JSON.parse(version.waveform_data)
-                : version.waveform_data;
-              if (Array.isArray(parsed)) waveformBars = parsed;
-            }
-          } catch (e) {}
 
           return (
             <div
@@ -164,92 +119,15 @@ export function TrackItem({ track, readOnly = false }: { track: any; readOnly?: 
               </div>
 
               {/* ── 스펙트럼 영역 ── */}
-              {/* 그리드 1fr 셀 내부에 비율 너비로 실제 스펙트럼 div를 배치 */}
               <div className="h-full relative">
-                {/* 비율 스펙트럼 bar: maxDuration 기준으로 짧은 버전은 더 좁게 */}
-                <div
-                  className={`h-full bg-[#1c2126] ${
-                    !isRep ? 'border-b border-[#22272c]' : ''
-                  } ${
-                    isPlayingTrack ? 'shadow-[0_0_15px_rgba(245,166,35,0.05)]' : ''
-                  } relative overflow-hidden hover:bg-[#252b31] cursor-pointer ${
-                    !isReady ? 'opacity-50' : ''
-                  }`}
-                  style={{ width: `${spectrumWidthPercent}%` }}
-                  onClick={e => {
-                    if (!isReady) return;
-                    const rect = e.currentTarget.getBoundingClientRect();
-                    const x = e.clientX - rect.left;
-                    const percent = x / rect.width;
-                    // seek 위치는 이 버전 기준이 아닌 클릭한 버전의 실제 길이 기준
-                    const seekTarget = percent * (versionDuration > 0 ? versionDuration : maxDuration);
-                    useAudioStore.getState().requestSeek(seekTarget);
-                    // 클릭한 버전으로 재생 전환
-                    if (playingVersionId !== version.id) {
-                      setPlayingVersionId(version.id);
-                      setIsPlaying(true);
-                    }
-                  }}
-                >
-                  {/* 진행 배경 */}
-                  {isPlayingTrack && (
-                    <div
-                      className={`absolute inset-0 ${isPlaying ? 'bg-primary/25' : 'bg-primary/20'} z-0`}
-                      style={{ width: `${progressPercent}%` }}
-                    />
-                  )}
-
-                  {/* 재생선(Playhead): 이 트랙이 재생 중이면 모든 버전에 표시 */}
-                  {isPlayingTrack && versionDuration > 0 && (
-                    <div
-                      className="absolute top-0 bottom-0 w-[2px] bg-primary shadow-[0_0_8px_#f5a623] z-10 pointer-events-none"
-                      style={{
-                        // 스펙트럼 너비 내에서의 실제 playhead 위치
-                        // = (globalCurrentTime % versionDuration) / versionDuration * 100%
-                        left: `${progressPercent}%`,
-                      }}
-                    />
-                  )}
-
-                  {/* 버퍼링 스트라이프 */}
-                  {!isReady && <div className="absolute inset-0 bg-stripes animate-pulse z-0" />}
-
-                  {/* 파형 막대 시각화 */}
-                  {waveformBars.length > 0 && (
-                    <div className="absolute inset-0 flex items-center px-0 z-[1] pointer-events-none" style={{ gap: '1px' }}>
-                      {waveformBars.map((val, i) => (
-                        <div
-                          key={i}
-                          className="flex-1 rounded-[1px] origin-bottom"
-                          style={{
-                            height: `${Math.max(8, (val / 100) * 85)}%`,
-                            backgroundColor: isRep
-                              ? `rgba(245, 166, 35, ${isPlayingTrack ? 0.55 : 0.3})`
-                              : `rgba(255, 255, 255, ${isPlayingTrack ? 0.15 : 0.08})`,
-                          }}
-                        />
-                      ))}
-                    </div>
-                  )}
-
-                  {/* 포맷/비트레이트 뱃지 */}
-                  <div className="absolute right-1 bottom-1 flex gap-1 z-10">
-                    <span
-                      className={`${
-                        isRep
-                          ? 'bg-primary/20 text-primary border-primary/30'
-                          : 'bg-black/50 text-gray-400 border-gray-700/50'
-                      } text-[9px] font-bold px-1.5 py-0.5 rounded border backdrop-blur-sm uppercase`}
-                    >
-                      {version.file_format || 'WAV'}
-                    </span>
-                    {isRep && version.bitrate ? (
-                      <span className="bg-primary/20 text-primary text-[9px] font-bold px-1.5 py-0.5 rounded border border-primary/30 backdrop-blur-sm uppercase">
-                        {version.bitrate}kbps
-                      </span>
-                    ) : null}
-                  </div>
-                </div>
+                <VersionProgressBar
+                  version={version}
+                  maxDuration={maxDuration}
+                  isPlayingTrack={isPlayingTrack}
+                  versionDuration={versionDuration}
+                  isReady={isReady}
+                  isRep={isRep}
+                />
               </div>
 
               {/* ── 버전 이름 ── */}
@@ -268,7 +146,7 @@ export function TrackItem({ track, readOnly = false }: { track: any; readOnly?: 
         })}
       </div>
 
-      {/* ── 하단 시간 표시 (버튼 열 제외 스펙트럼 하단 양끝) ── */}
+      {/* ── 하단 시간 표시 ── */}
       <div className="grid grid-cols-[2rem_1fr_4rem] lg:grid-cols-[2.5rem_1fr_6rem] gap-x-1 lg:gap-x-2 mt-1.5">
         <div />
         <div
@@ -276,8 +154,8 @@ export function TrackItem({ track, readOnly = false }: { track: any; readOnly?: 
             isPlayingTrack ? 'text-primary' : 'text-gray-500'
           }`}
         >
-          {/* 현재 재생 위치 */}
-          <span>{isPlayingTrack ? formatTime(globalCurrentTime) : '00:00'}</span>
+          {/* 현재 재생 위치 (고주파 격리 컴포넌트) */}
+          <CurrentTimeText trackId={track.id} />
           {/* 총 길이 (최대 버전 기준) */}
           <span>{totalDisplayDuration > 0 ? formatTime(totalDisplayDuration) : '00:00'}</span>
         </div>
@@ -285,6 +163,165 @@ export function TrackItem({ track, readOnly = false }: { track: any; readOnly?: 
       </div>
     </div>
   );
+}
+
+// ──────────────────────────────────────────────
+// ⏱️ 고주파 렌더링 격리 전용 서브 컴포넌트
+// ──────────────────────────────────────────────
+
+/**
+ * 진행 표시바 컴포넌트: globalCurrentTime을 격리 구독하여, 파형 전체의 무수히 많은 div 노드가
+ * 프레임마다 재생성되는 CPU 병목 및 루프 소리 튐(Tick) 현상을 완치합니다.
+ */
+function VersionProgressBar({
+  version,
+  maxDuration,
+  isPlayingTrack,
+  versionDuration,
+  isReady,
+  isRep,
+}: {
+  version: any;
+  maxDuration: number;
+  isPlayingTrack: boolean;
+  versionDuration: number;
+  isReady: boolean;
+  isRep: boolean;
+}) {
+  const globalCurrentTime = useAudioStore(state => state.globalCurrentTime);
+  const playingVersionId = useAudioStore(state => state.playingVersionId);
+  const isPlaying = useAudioStore(state => state.isPlaying);
+  const setPlayingVersionId = useAudioStore(state => state.setPlayingVersionId);
+  const setIsPlaying = useAudioStore(state => state.setIsPlaying);
+
+  const isCurrent = playingVersionId === version.id;
+
+  // 스펙트럼 너비 비율
+  const spectrumWidthPercent =
+    maxDuration > 0 && versionDuration > 0
+      ? Math.min((versionDuration / maxDuration) * 100, 100)
+      : 100;
+
+  // 재생 진행 퍼센트
+  let progressPercent = 0;
+  if (isPlayingTrack && isPlaying && versionDuration > 0) {
+    const localTime = globalCurrentTime % versionDuration;
+    progressPercent = Math.min((localTime / versionDuration) * 100, 100);
+  } else if (isCurrent && versionDuration > 0) {
+    progressPercent = Math.min((globalCurrentTime / versionDuration) * 100, 100);
+  }
+
+  // waveform_data 파싱
+  let waveformBars: number[] = [];
+  try {
+    if (version.waveform_data) {
+      const parsed = typeof version.waveform_data === 'string'
+        ? JSON.parse(version.waveform_data)
+        : version.waveform_data;
+      if (Array.isArray(parsed)) waveformBars = parsed;
+    }
+  } catch (e) {}
+
+  return (
+    <div
+      className={`h-full bg-[#1c2126] ${
+        !isRep ? 'border-b border-[#22272c]' : ''
+      } ${
+        isPlayingTrack ? 'shadow-[0_0_15px_rgba(245,166,35,0.05)]' : ''
+      } relative overflow-hidden hover:bg-[#252b31] cursor-pointer ${
+        !isReady ? 'opacity-50' : ''
+      }`}
+      style={{ width: `${spectrumWidthPercent}%` }}
+      onClick={e => {
+        if (!isReady) return;
+        const rect = e.currentTarget.getBoundingClientRect();
+        const x = e.clientX - rect.left;
+        const percent = x / rect.width;
+        const seekTarget = percent * (versionDuration > 0 ? versionDuration : maxDuration);
+        useAudioStore.getState().requestSeek(seekTarget);
+        if (playingVersionId !== version.id) {
+          setPlayingVersionId(version.id);
+          setIsPlaying(true);
+        }
+      }}
+    >
+      {/* 진행 배경 */}
+      {isPlayingTrack && (
+        <div
+          className={`absolute inset-0 ${isPlaying ? 'bg-primary/25' : 'bg-primary/20'} z-0`}
+          style={{ width: `${progressPercent}%` }}
+        />
+      )}
+
+      {/* 재생선(Playhead) */}
+      {isPlayingTrack && versionDuration > 0 && (
+        <div
+          className="absolute top-0 bottom-0 w-[2px] bg-primary shadow-[0_0_8px_#f5a623] z-10 pointer-events-none"
+          style={{
+            left: `${progressPercent}%`,
+          }}
+        />
+      )}
+
+      {/* 버퍼링 스트라이프 */}
+      {!isReady && <div className="absolute inset-0 bg-stripes animate-pulse z-0" />}
+
+      {/* 파형 막대 시각화 */}
+      {waveformBars.length > 0 && (
+        <div className="absolute inset-0 flex items-center px-0 z-[1] pointer-events-none" style={{ gap: '1px' }}>
+          {waveformBars.map((val, i) => (
+            <div
+              key={i}
+              className="flex-1 rounded-[1px] origin-bottom"
+              style={{
+                height: `${Math.max(8, (val / 100) * 85)}%`,
+                backgroundColor: isRep
+                  ? `rgba(245, 166, 35, ${isPlayingTrack ? 0.55 : 0.3})`
+                  : `rgba(255, 255, 255, ${isPlayingTrack ? 0.15 : 0.08})`,
+              }}
+            />
+          ))}
+        </div>
+      )}
+
+      {/* 포맷/비트레이트 뱃지 */}
+      <div className="absolute right-1 bottom-1 flex gap-1 z-10">
+        <span
+          className={`${
+            isRep
+              ? 'bg-primary/20 text-primary border-primary/30'
+              : 'bg-black/50 text-gray-400 border-gray-700/50'
+          } text-[9px] font-bold px-1.5 py-0.5 rounded border backdrop-blur-sm uppercase`}
+        >
+          {version.file_format || 'WAV'}
+        </span>
+        {isRep && version.bitrate ? (
+          <span className="bg-primary/20 text-primary text-[9px] font-bold px-1.5 py-0.5 rounded border border-primary/30 backdrop-blur-sm uppercase">
+            {version.bitrate}kbps
+          </span>
+        ) : null}
+      </div>
+    </div>
+  );
+}
+
+/**
+ * 재생경과 시간 격리 표시 컴포넌트
+ */
+function CurrentTimeText({ trackId }: { trackId: string }) {
+  const globalCurrentTime = useAudioStore(state => state.globalCurrentTime);
+  const playingVersionId = useAudioStore(state => state.playingVersionId);
+  const project = useProjectStore(state => state.project);
+
+  const track = project?.categories
+    .flatMap(c => c.tracks)
+    .find(t => t.id === trackId);
+
+  const isPlayingTrack = playingVersionId
+    ? (track?.versions?.some((v: any) => v.id === playingVersionId) ?? false)
+    : false;
+
+  return <span>{isPlayingTrack ? formatTime(globalCurrentTime) : '00:00'}</span>;
 }
 
 // 시간 포맷 헬퍼 (초 → MM:SS)
