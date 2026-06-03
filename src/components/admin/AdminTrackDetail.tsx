@@ -17,6 +17,32 @@ export function AdminTrackDetail({ track, projectId }: AdminTrackDetailProps) {
   const [uploadText, setUploadText] = useState('');
   const fileInputRef = useRef<HTMLInputElement>(null);
 
+  const project = useProjectStore(state => state.project);
+  const categories = project?.categories || [];
+
+  const getRepresentativeId = (): string | null => {
+    const versions = track.versions || [];
+    if (versions.length === 0) return null;
+    const manualRep = versions.find((v: any) => v.is_representative === true || v.is_representative === 1);
+    if (manualRep) return manualRep.id;
+
+    let latest = versions[0];
+    for (let i = 1; i < versions.length; i++) {
+      const v = versions[i];
+      if (v.created_at && latest.created_at) {
+        if (new Date(v.created_at) > new Date(latest.created_at)) {
+          latest = v;
+        }
+      } else if (v.order_index > latest.order_index) {
+        latest = v;
+      }
+    }
+    return latest.id;
+  };
+
+  const representativeId = getRepresentativeId();
+  const hasManualRep = track.versions?.some((v: any) => v.is_representative === true || v.is_representative === 1) || false;
+
   const handleDeleteTrack = async () => {
     if (confirm("이 트랙과 속해있는 모든 버전을 삭제하시겠습니까? (R2 파일 포함)")) {
       await fetch('/api/actions', {
@@ -43,16 +69,15 @@ export function AdminTrackDetail({ track, projectId }: AdminTrackDetailProps) {
       headers: { 'Content-Type': 'application/json' },
       body: JSON.stringify({ action: 'renameVersion', payload: { id: versionId, title: newTitle } })
     });
-    // 스토어 상태 갱신은 간단한 화면 새로고침 또는 스토어 내 직접 교체로 할 수 있습니다.
-    window.location.reload();
+    // 스토어 상태 직접 교체
+    useProjectStore.getState().updateVersionTitle(track.id, versionId, newTitle);
   };
 
-  const handleToggleRepresentative = async (versionId: string, isRep: boolean) => {
-    // 이미 대표 버전인데 클릭한 경우는 해제하지 않고 무시하거나 대표 상태를 유지합니다.
-    if (isRep) return;
+  const handleToggleRepresentative = async (versionId: string, isManualRep: boolean) => {
+    const nextVersionId = isManualRep ? null : versionId;
 
     // Zustand 스토어 즉시 반영
-    useProjectStore.getState().setRepresentativeVersion(track.id, versionId);
+    useProjectStore.getState().setRepresentativeVersion(track.id, nextVersionId);
 
     // API 호출
     await fetch('/api/actions', {
@@ -60,7 +85,7 @@ export function AdminTrackDetail({ track, projectId }: AdminTrackDetailProps) {
       headers: { 'Content-Type': 'application/json' },
       body: JSON.stringify({ 
         action: 'setRepresentativeVersion', 
-        payload: { id: versionId, track_id: track.id } 
+        payload: { id: nextVersionId, track_id: track.id } 
       })
     });
   };
@@ -89,7 +114,7 @@ export function AdminTrackDetail({ track, projectId }: AdminTrackDetailProps) {
         headers: { 'Content-Type': 'application/json' },
         body: JSON.stringify({ action: 'deleteVersion', payload: { id: versionId } })
       });
-      window.location.reload();
+      useProjectStore.getState().deleteVersionFromTrack(track.id, versionId);
     }
   };
 
@@ -114,7 +139,7 @@ export function AdminTrackDetail({ track, projectId }: AdminTrackDetailProps) {
       setUploadText(`R2 직접 업로드 중: ${file.name}...`);
       
       // 2. XMLHttpRequest를 통한 진행율 표시 직접 업로드
-      await new Promise((resolve, reject) => {
+      const uploadPromise = new Promise<string>((resolve, reject) => {
         const xhr = new XMLHttpRequest();
         xhr.open('PUT', url, true);
         xhr.setRequestHeader('Content-Type', file.type || 'audio/wav');
@@ -139,11 +164,20 @@ export function AdminTrackDetail({ track, projectId }: AdminTrackDetailProps) {
         xhr.send(file);
       });
 
+      const responseText = await uploadPromise;
+
       setUploadProgress(100);
       setUploadText('업로드 및 메타데이터 저장 완료!');
       
-      // UI 리로드
-      window.location.reload();
+      // UI 리로드 대신 스토어 상태 직접 변이
+      try {
+        const resJson = JSON.parse(responseText);
+        if (resJson.version) {
+          useProjectStore.getState().addVersionToTrack(track.id, resJson.version);
+        }
+      } catch (e) {
+        console.error("Failed to parse upload API response:", e);
+      }
       
     } catch (err) {
       console.error(err);
@@ -169,7 +203,36 @@ export function AdminTrackDetail({ track, projectId }: AdminTrackDetailProps) {
               isTitle={true}
             />
           </h2>
-          <p className="text-xs text-gray-500 font-medium">버전 관리 및 오디오 업로드 (공개 페이지용 설정)</p>
+          <div className="mt-2 flex items-center gap-2">
+            <span className="text-xs text-gray-500 font-bold shrink-0">카테고리 이동:</span>
+            <select
+              value={track.category_id}
+              onChange={async (e) => {
+                const newCategoryId = e.target.value;
+                const oldCategoryId = track.category_id;
+                if (newCategoryId === oldCategoryId) return;
+                
+                // Zustand 스토어 즉시 반영
+                useProjectStore.getState().moveTrackToCategory(track.id, oldCategoryId, newCategoryId);
+                // API 호출
+                await fetch('/api/actions', {
+                  method: 'POST',
+                  headers: { 'Content-Type': 'application/json' },
+                  body: JSON.stringify({ 
+                    action: 'moveTrackToCategory', 
+                    payload: { id: track.id, category_id: newCategoryId } 
+                  })
+                });
+              }}
+              className="bg-[#1c2126] text-xs text-gray-300 font-bold border border-[#22272c] rounded px-2.5 py-1.5 focus:outline-none focus:border-[#f5a623] transition-colors cursor-pointer"
+            >
+              {categories.map((c: any) => (
+                <option key={c.id} value={c.id}>
+                  {c.title}
+                </option>
+              ))}
+            </select>
+          </div>
         </div>
         <button 
           onClick={handleDeleteTrack} 
@@ -190,13 +253,15 @@ export function AdminTrackDetail({ track, projectId }: AdminTrackDetailProps) {
             </div>
           ) : (
             track.versions.map((version: any) => {
-              const isRep = version.is_representative;
+              const isManualRep = version.is_representative === true || version.is_representative === 1;
+              const isAutoRep = !hasManualRep && version.id === representativeId;
+              const isEffectiveRep = isManualRep || isAutoRep;
               const isVis = version.is_visible;
               return (
                 <div 
                   key={version.id} 
                   className={`flex items-center gap-3 border p-3 rounded-md transition-all ${
-                    isRep 
+                    isEffectiveRep 
                       ? 'bg-[#1c2126] border-[#22272c] shadow-md shadow-black/20' 
                       : 'bg-[#161a1d] border-[#22272c]/40 hover:bg-[#1c2126] hover:border-[#22272c]'
                   } ${!isVis ? 'opacity-60 hover:opacity-100' : ''}`}
@@ -207,11 +272,27 @@ export function AdminTrackDetail({ track, projectId }: AdminTrackDetailProps) {
                       <Star className="w-4 h-4 opacity-0 pointer-events-none" /> {/* Spacer */}
                     </div>
                     <button 
-                      onClick={() => handleToggleRepresentative(version.id, isRep)}
-                      className={`p-1 transition-transform hover:scale-110 ${isRep ? 'text-primary' : 'text-gray-500 hover:text-primary'}`} 
-                      title={isRep ? "대표 버전 활성화됨" : "클릭하여 대표 버전으로 지정"}
+                      onClick={() => handleToggleRepresentative(version.id, isManualRep)}
+                      className={`p-1 transition-transform hover:scale-110 ${
+                        isEffectiveRep ? 'text-[#f5a623]' : 'text-gray-500 hover:text-[#f5a623]'
+                      }`} 
+                      title={
+                        isManualRep 
+                          ? "대표 버전 활성화됨 (클릭 시 지정 해제)" 
+                          : isAutoRep 
+                            ? "현재 자동 대표 버전 (클릭하여 수동 대표 버전으로 지정)" 
+                            : "클릭하여 대표 버전으로 지정"
+                      }
                     >
-                      <Star className={`w-4 h-4 ${isRep ? 'fill-primary text-primary' : ''}`} />
+                      <Star 
+                        className={`w-4 h-4 ${
+                          isManualRep 
+                            ? 'fill-[#f5a623] text-[#f5a623]' 
+                            : isAutoRep 
+                              ? 'text-[#f5a623] fill-none stroke-[1.5px]' 
+                              : 'text-gray-500 fill-none'
+                        }`} 
+                      />
                     </button>
                   </div>
 

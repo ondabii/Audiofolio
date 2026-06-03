@@ -83,7 +83,7 @@ export async function POST(request: NextRequest) {
         await executeActionQuery("UPDATE projects SET title = ? WHERE id = ?", [payload.title, payload.id]);
         break;
       case "updateProjectSettings":
-        await executeActionQuery("UPDATE projects SET custom_alias = ? WHERE id = ?", [payload.custom_alias, payload.id]);
+        await executeActionQuery("UPDATE projects SET title = ?, custom_alias = ? WHERE id = ?", [payload.title, payload.custom_alias, payload.id]);
         break;
       case "deleteProject":
         // 1. Fetch R2 files to delete
@@ -156,6 +156,9 @@ export async function POST(request: NextRequest) {
       case "renameTrack":
         await executeActionQuery("UPDATE tracks SET title = ? WHERE id = ?", [payload.title, payload.id]);
         break;
+      case "moveTrackToCategory":
+        await executeActionQuery("UPDATE tracks SET category_id = ? WHERE id = ?", [payload.category_id, payload.id]);
+        break;
       case "deleteTrack":
         await executeActionQuery("DELETE FROM tracks WHERE id = ?", [payload.id]);
         break;
@@ -167,10 +170,14 @@ export async function POST(request: NextRequest) {
         await executeActionBatch(trackUpdates);
         break;
       case "setRepresentativeVersion":
-        await executeActionBatch([
-          { sql: "UPDATE track_versions SET is_representative = 0 WHERE track_id = ?", params: [payload.track_id] },
-          { sql: "UPDATE track_versions SET is_representative = 1 WHERE id = ?", params: [payload.id] }
-        ]);
+        if (!payload.id) {
+          await executeActionQuery("UPDATE track_versions SET is_representative = 0 WHERE track_id = ?", [payload.track_id]);
+        } else {
+          await executeActionBatch([
+            { sql: "UPDATE track_versions SET is_representative = 0 WHERE track_id = ?", params: [payload.track_id] },
+            { sql: "UPDATE track_versions SET is_representative = 1 WHERE id = ?", params: [payload.id] }
+          ]);
+        }
         break;
       case "toggleVersionVisibility":
         await executeActionQuery("UPDATE track_versions SET is_visible = ? WHERE id = ?", [payload.is_visible ? 1 : 0, payload.id]);

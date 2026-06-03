@@ -27,20 +27,23 @@ export async function PUT(request: NextRequest) {
     const bitrate = url.searchParams.get("bitrate");
     const waveformData = url.searchParams.get("waveformData");
 
+    const titleVal = fileName.split('.').slice(0, -1).join('.') || fileName;
+    const formatVal = contentType.split('/')[1]?.toUpperCase() || 'WAV';
     const objectKey = `tracks/${trackId}/${versionId}_${fileName}`;
 
-    // 1. D1 레코드 생성 (바인딩이 있으면 바인딩 쿼리, 없으면 HTTP fallback 엔진 사용)
+    // 1. D1 레코드 생성
     const sql = `
       INSERT INTO track_versions 
-      (id, track_id, audio_url, is_representative, is_visible, duration_ms, file_format, bitrate, file_size_bytes, waveform_data, status)
-      VALUES (?, ?, ?, 0, 1, ?, ?, ?, ?, ?, 'active')
+      (id, track_id, title, audio_url, is_representative, is_visible, duration_ms, file_format, bitrate, file_size_bytes, waveform_data, status)
+      VALUES (?, ?, ?, ?, 0, 1, ?, ?, ?, ?, ?, 'active')
     `;
     const params = [
       versionId, 
       trackId, 
+      titleVal,
       objectKey, 
       durationMs ? parseInt(durationMs) : null, 
-      contentType, 
+      formatVal, 
       bitrate ? parseInt(bitrate) : null, 
       fileSizeBytes ? parseInt(fileSizeBytes) : null, 
       waveformData || null
@@ -53,7 +56,7 @@ export async function PUT(request: NextRequest) {
       await executeD1Query(sql, params);
     }
 
-    // 2. Upload to R2 (바인딩이 있으면 실제 R2 버킷 저장, 없으면 가상 업로드 성공 처리)
+    // 2. Upload to R2
     if (env.R2_BUCKET) {
       await env.R2_BUCKET.put(objectKey, request.body, {
         httpMetadata: { contentType: contentType }
@@ -62,7 +65,27 @@ export async function PUT(request: NextRequest) {
       console.log(`ℹ️ No R2 binding. Local virtual upload success. Object key: ${objectKey}`);
     }
 
-    return NextResponse.json({ success: true, objectKey });
+    const R2_PUBLIC_URL = env.R2_PUBLIC_URL || "https://afc.ondabii.com";
+    const encodedKey = objectKey.split('/').map((seg: string) => encodeURIComponent(seg)).join('/');
+    const publicUrl = `${R2_PUBLIC_URL}/${encodedKey}`;
+
+    const newVersion = {
+      id: versionId,
+      track_id: trackId,
+      title: titleVal,
+      audio_url: objectKey,
+      public_url: publicUrl,
+      is_representative: false,
+      is_visible: true,
+      duration_ms: durationMs ? parseInt(durationMs) : 0,
+      file_format: formatVal,
+      bitrate: bitrate ? parseInt(bitrate) : 0,
+      file_size_bytes: fileSizeBytes ? parseInt(fileSizeBytes) : 0,
+      waveform_data: waveformData || null,
+      order_index: 999
+    };
+
+    return NextResponse.json({ success: true, objectKey, version: newVersion });
   } catch (e: any) {
     console.error("Upload API Error:", e);
     return NextResponse.json({ error: e.message }, { status: 500 });

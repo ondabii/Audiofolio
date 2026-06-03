@@ -55,8 +55,13 @@ interface ProjectStoreState {
   deleteTrack: (id: string) => void;
   reorderCategories: (oldIndex: number, newIndex: number) => void;
   reorderTracks: (categoryId: string, oldIndex: number, newIndex: number) => void;
-  setRepresentativeVersion: (trackId: string, versionId: string) => void;
+  setRepresentativeVersion: (trackId: string, versionId: string | null) => void;
   toggleVersionVisibility: (trackId: string, versionId: string) => void;
+  addVersionToTrack: (trackId: string, version: VersionData) => void;
+  deleteVersionFromTrack: (trackId: string, versionId: string) => void;
+  updateVersionTitle: (trackId: string, versionId: string, title: string) => void;
+  moveTrackToCategory: (trackId: string, oldCategoryId: string, newCategoryId: string) => void;
+  updateProjectSettings: (title: string, customAlias: string) => void;
 }
 
 export const useProjectStore = create<ProjectStoreState>((set) => ({
@@ -176,7 +181,7 @@ export const useProjectStore = create<ProjectStoreState>((set) => ({
                   ...t,
                   versions: t.versions.map(v => ({
                     ...v,
-                    is_representative: v.id === versionId
+                    is_representative: versionId === null ? false : v.id === versionId
                   }))
                 }
               : t
@@ -185,7 +190,7 @@ export const useProjectStore = create<ProjectStoreState>((set) => ({
       }
     };
   }),
-
+ 
   toggleVersionVisibility: (trackId, versionId) => set((state) => {
     if (!state.project) return state;
     return {
@@ -204,6 +209,113 @@ export const useProjectStore = create<ProjectStoreState>((set) => ({
               : t
           )
         }))
+      }
+    };
+  }),
+
+  addVersionToTrack: (trackId, version) => set((state) => {
+    if (!state.project) return state;
+    return {
+      project: {
+        ...state.project,
+        categories: state.project.categories.map(c => ({
+          ...c,
+          tracks: c.tracks.map(t => 
+            t.id === trackId 
+              ? { ...t, versions: [...t.versions, version] }
+              : t
+          )
+        }))
+      }
+    };
+  }),
+
+  deleteVersionFromTrack: (trackId, versionId) => set((state) => {
+    if (!state.project) return state;
+    return {
+      project: {
+        ...state.project,
+        categories: state.project.categories.map(c => ({
+          ...c,
+          tracks: c.tracks.map(t => 
+            t.id === trackId 
+              ? { ...t, versions: t.versions.filter(v => v.id !== versionId) }
+              : t
+          )
+        }))
+      }
+    };
+  }),
+
+  updateVersionTitle: (trackId, versionId, title) => set((state) => {
+    if (!state.project) return state;
+    return {
+      project: {
+        ...state.project,
+        categories: state.project.categories.map(c => ({
+          ...c,
+          tracks: c.tracks.map(t => 
+            t.id === trackId 
+              ? {
+                  ...t,
+                  versions: t.versions.map(v => 
+                    v.id === versionId ? { ...v, title } : v
+                  )
+                }
+              : t
+          )
+        }))
+      }
+    };
+  }),
+
+  moveTrackToCategory: (trackId, oldCategoryId, newCategoryId) => set((state) => {
+    if (!state.project) return state;
+    
+    // 1. 기존 카테고리에서 트랙 추출
+    let targetTrack: TrackData | null = null;
+    const projectWithExtractedTrack = {
+      ...state.project,
+      categories: state.project.categories.map(c => {
+        if (c.id === oldCategoryId) {
+          targetTrack = c.tracks.find(t => t.id === trackId) || null;
+          return {
+            ...c,
+            tracks: c.tracks.filter(t => t.id !== trackId)
+          };
+        }
+        return c;
+      })
+    };
+
+    if (!targetTrack) return state;
+
+    // 2. 새 카테고리에 트랙 삽입
+    const finalProject = {
+      ...projectWithExtractedTrack,
+      categories: projectWithExtractedTrack.categories.map(c => {
+        if (c.id === newCategoryId && targetTrack) {
+          // category_id 필드 갱신
+          const updatedTrack = { ...targetTrack, category_id: newCategoryId };
+          return {
+            ...c,
+            tracks: [...c.tracks, updatedTrack]
+          };
+        }
+        return c;
+      })
+    };
+
+    return { project: finalProject };
+  }),
+
+  updateProjectSettings: (title, customAlias) => set((state) => {
+    if (!state.project) return state;
+    return {
+      project: {
+        ...state.project,
+        title,
+        custom_alias: customAlias
       }
     };
   })

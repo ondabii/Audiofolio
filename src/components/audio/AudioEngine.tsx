@@ -20,134 +20,232 @@ export function AudioEngine({ trackVersions = [] }: { trackVersions: any[] }) {
     clearSeekRequest,
   } = useAudioStore();
 
-  const audioRef = useRef<HTMLAudioElement | null>(null);
+  const audioCtxRef = useRef<AudioContext | null>(null);
+  const buffersRef = useRef<Record<string, AudioBuffer>>({});
+  
+  // 현재 동시 가동 중인 오디오 노드 레프
+  const sourcesRef = useRef<Record<string, AudioBufferSourceNode>>({});
+  const gainsRef = useRef<Record<string, GainNode>>({});
+
+  // 타임라인 계산 레프
+  const startTimeRef = useRef<number>(0);
+  const startOffsetRef = useRef<number>(0);
   const rafRef = useRef<number>(0);
-  const loadedVersionIdRef = useRef<string | null>(null);
+
+  // 현재 기동된 버전 ID들 및 재생 여부 레프
+  const activeVersionIdsRef = useRef<string[]>([]);
+  const isPlayingRef = useRef<boolean>(false);
+
+  // ─── 단일 AudioContext 초기화 ───
+  const getAudioContext = useCallback(() => {
+    if (!audioCtxRef.current) {
+      audioCtxRef.current = new (window.AudioContext || (window as any).webkitAudioContext)();
+    }
+    return audioCtxRef.current;
+  }, []);
 
   // ─── 시간 동기화 루프 ───
   const stopSync = useCallback(() => {
     cancelAnimationFrame(rafRef.current);
   }, []);
 
-  const startSync = useCallback(() => {
+  const startSync = useCallback((maxDuration: number) => {
     stopSync();
     const tick = () => {
-      const audio = audioRef.current;
-      if (audio) setGlobalCurrentTime(audio.currentTime);
+      const ctx = audioCtxRef.current;
+      if (ctx && isPlayingRef.current && maxDuration > 0) {
+        const elapsed = ctx.currentTime - startTimeRef.current;
+        const current = (elapsed + startOffsetRef.current) % maxDuration;
+        setGlobalCurrentTime(current);
+      }
       rafRef.current = requestAnimationFrame(tick);
     };
     rafRef.current = requestAnimationFrame(tick);
   }, [stopSync, setGlobalCurrentTime]);
 
-  // ─── 오디오 객체 생성 및 상시 리스너 바인딩 ───
-  useEffect(() => {
-    const audio = new Audio();
-    audio.loop = true;
-    audio.preload = 'auto';
-    audioRef.current = audio;
-
-    const onCanPlay = () => {
-      const currentId = useAudioStore.getState().playingVersionId;
-      if (!currentId) return;
-
-      const version = trackVersions.find((v: any) => v.id === currentId);
-      const durationMs = (version?.duration_ms > 0)
-        ? version.duration_ms
-        : Math.round(audio.duration * 1000);
-
-      updateVersionState(currentId, { isReady: true, durationMs });
-
-      // 현재 재생 중이면 재생 처리
-      const store = useAudioStore.getState();
-      if (store.isPlaying && store.playingVersionId === currentId) {
-        audio.play()
-          .then(() => startSync())
-          .catch(err => console.error('[AudioEngine] onCanPlay 재생 실패:', err));
-      }
-    };
-
-    const onError = () => {
-      const currentId = useAudioStore.getState().playingVersionId;
-      if (currentId) {
-        console.error('[AudioEngine] 오디오 로드 오류:', audio.src);
-        updateVersionState(currentId, { isReady: false });
-      }
-    };
-
-    audio.addEventListener('canplay', onCanPlay);
-    audio.addEventListener('error', onError);
-
-    return () => {
-      stopSync();
-      audio.removeEventListener('canplay', onCanPlay);
-      audio.removeEventListener('error', onError);
-      audio.pause();
-      audio.src = '';
-      audioRef.current = null;
-    };
-  }, [trackVersions, updateVersionState, startSync, stopSync]);
-
-  // ─── playingVersionId 변경 시 오디오 소스 교체 ───
-  useEffect(() => {
-    const audio = audioRef.current;
-    if (!audio) return;
-
-    if (!playingVersionId) {
-      audio.pause();
-      audio.src = '';
-      loadedVersionIdRef.current = null;
-      stopSync();
-      return;
-    }
-
-    // 이미 같은 버전이 로드되어 있으면 스킵
-    if (loadedVersionIdRef.current === playingVersionId) {
-      return;
-    }
-    loadedVersionIdRef.current = playingVersionId;
-
-    const version = trackVersions.find((v: any) => v.id === playingVersionId);
-    if (!version?.audio_url) return;
-
+  // ─── 활성 오디오 소스 노드 클린업 ───
+  const stopAllSources = useCallback(() => {
     stopSync();
-    audio.pause();
+    Object.keys(sourcesRef.current).forEach(id => {
+      try {
+        sourcesRef.current[id].stop();
+        sourcesRef.current[id].disconnect();
+      } catch (e) {}
+    });
+    sourcesRef.current = {};
 
-    updateVersionState(playingVersionId, { isReady: false });
-    audio.src = `/api/audio-url?key=${encodeURIComponent(version.audio_url)}`;
-    audio.load();
-  }, [playingVersionId, trackVersions, updateVersionState, stopSync]);
+    Object.keys(gainsRef.current).forEach(id => {
+      try {
+        gainsRef.current[id].disconnect();
+      } catch (e) {}
+    });
+    gainsRef.current = {};
+    activeVersionIdsRef.current = [];
+  }, [stopSync]);
+
+  // 언마운트 정리
+  useEffect(() => {
+    return () => {
+      stopAllSources();
+      if (audioCtxRef.current) {
+        audioCtxRef.current.close();
+        audioCtxRef.current = null;
+      }
+    };
+  }, [stopAllSources]);
+
+  // ─── 오디오 바이너리 fetch 및 AudioBuffer 디코딩 캐시 ───
+  const loadAudioBuffer = useCallback(async (version: any): Promise<AudioBuffer> => {
+    const id = version.id;
+    if (buffersRef.current[id]) {
+      return buffersRef.current[id];
+    }
+
+    updateVersionState(id, { isReady: false });
+    const url = `/api/audio-url?key=${encodeURIComponent(version.audio_url)}`;
+    const res = await fetch(url);
+    if (!res.ok) throw new Error(`HTTP 에러: ${res.status}`);
+
+    const arrayBuffer = await res.arrayBuffer();
+    const ctx = getAudioContext();
+    const audioBuffer = await ctx.decodeAudioData(arrayBuffer);
+    
+    buffersRef.current[id] = audioBuffer;
+    
+    const durationMs = version.duration_ms > 0 
+      ? version.duration_ms 
+      : Math.round(audioBuffer.duration * 1000);
+      
+    updateVersionState(id, { isReady: true, durationMs });
+    
+    return audioBuffer;
+  }, [getAudioContext, updateVersionState]);
+
+  // ─── 병렬 재생 기동 엔진 ───
+  const startParallelPlay = useCallback(async (targetOffset: number) => {
+    const ctx = getAudioContext();
+    if (ctx.state === 'suspended') {
+      await ctx.resume();
+    }
+
+    stopAllSources();
+
+    if (!playingVersionId) return;
+    
+    const targetVersion = trackVersions.find(v => v.id === playingVersionId);
+    if (!targetVersion) return;
+
+    // 해당 트랙에 속한 모든 동위 버전 추출
+    const siblingVersions = trackVersions.filter(v => v.track_id === targetVersion.track_id);
+    const siblingIds = siblingVersions.map(v => v.id);
+
+    // 재생을 준비하기 위해 트랙 내 모든 버전을 병렬로 디코딩 로드
+    const buffersToPlay: { id: string; buffer: AudioBuffer }[] = [];
+    let maxDuration = 0;
+
+    for (const ver of siblingVersions) {
+      try {
+        const buf = await loadAudioBuffer(ver);
+        buffersToPlay.push({ id: ver.id, buffer: buf });
+        if (buf.duration > maxDuration) {
+          maxDuration = buf.duration;
+        }
+      } catch (e) {
+        console.error(`오디오 로딩 실패: ${ver.title}`, e);
+      }
+    }
+
+    if (buffersToPlay.length === 0 || maxDuration === 0) return;
+
+    const startTime = ctx.currentTime;
+    startTimeRef.current = startTime;
+    startOffsetRef.current = targetOffset;
+    isPlayingRef.current = true;
+    activeVersionIdsRef.current = siblingIds;
+
+    // ── 모든 채널 동시 기동 및 볼륨 Gain 지정 ──
+    buffersToPlay.forEach(({ id, buffer }) => {
+      const source = ctx.createBufferSource();
+      source.buffer = buffer;
+      source.loop = true; // PCM 하드웨어 레벨 Gapless Loop 활성화
+
+      const gainNode = ctx.createGain();
+      const volume = id === playingVersionId ? 1.0 : 0.0;
+      gainNode.gain.setValueAtTime(volume, startTime);
+
+      source.connect(gainNode);
+      gainNode.connect(ctx.destination);
+
+      // 버퍼 루프 랩어라운드를 감안한 개별 시작 오프셋
+      const offset = targetOffset % buffer.duration;
+      source.start(startTime, offset);
+
+      sourcesRef.current[id] = source;
+      gainsRef.current[id] = gainNode;
+    });
+
+    startSync(maxDuration);
+  }, [playingVersionId, trackVersions, getAudioContext, stopAllSources, loadAudioBuffer, startSync]);
+
+  // ─── playingVersionId 변경 처리 (0ms 크로스페이드 AB 스위칭) ───
+  useEffect(() => {
+    if (!playingVersionId) {
+      stopAllSources();
+      isPlayingRef.current = false;
+      return;
+    }
+
+    const ctx = getAudioContext();
+    const isAlreadyActive = activeVersionIdsRef.current.includes(playingVersionId);
+
+    if (isAlreadyActive && isPlayingRef.current) {
+      // ── 동일 트랙 내 AB 비교: 크로스페이드 볼륨 반전만 수행 (0ms 레이텐시) ──
+      const time = ctx.currentTime;
+      Object.keys(gainsRef.current).forEach(id => {
+        const gainNode = gainsRef.current[id];
+        const targetVol = id === playingVersionId ? 1.0 : 0.0;
+        
+        gainNode.gain.cancelScheduledValues(time);
+        gainNode.gain.setValueAtTime(gainNode.gain.value, time);
+        // 30ms 크로스페이드 램프로 틱 노이즈 100% 차단
+        gainNode.gain.linearRampToValueAtTime(targetVol, time + 0.03);
+      });
+    } else {
+      // ── 새로운 트랙 재생: 병렬 노드 구성 재로드 ──
+      if (isPlaying) {
+        startParallelPlay(0);
+      } else {
+        const targetVersion = trackVersions.find(v => v.id === playingVersionId);
+        if (targetVersion) {
+          loadAudioBuffer(targetVersion).catch(e => console.error(e));
+        }
+      }
+    }
+  }, [playingVersionId, trackVersions, isPlaying, getAudioContext, startParallelPlay, loadAudioBuffer, stopAllSources]);
 
   // ─── isPlaying 변경 처리 ───
   useEffect(() => {
-    const audio = audioRef.current;
-    if (!audio || !playingVersionId) return;
-
     if (isPlaying) {
-      // readyState가 2(HAVE_CURRENT_DATA) 이상이면 즉시 재생 가능
-      if (audio.readyState >= 2) {
-        audio.play()
-          .then(() => startSync())
-          .catch(err => console.error('[AudioEngine] isPlaying 재생 실패:', err));
-      } else {
-        // readyState가 부족하면 로딩 상태로 두고 load() 트리거하여 canplay 리스너 유도
-        updateVersionState(playingVersionId, { isReady: false });
-        audio.load();
+      if (!isPlayingRef.current && playingVersionId) {
+        const store = useAudioStore.getState();
+        startParallelPlay(store.globalCurrentTime);
       }
     } else {
-      audio.pause();
-      stopSync();
+      stopAllSources();
+      isPlayingRef.current = false;
     }
-  }, [isPlaying, playingVersionId, startSync, stopSync, updateVersionState]);
+  }, [isPlaying, playingVersionId, startParallelPlay, stopAllSources]);
 
   // ─── Seek 처리 ───
   useEffect(() => {
     if (seekRequestTime === null) return;
-    const audio = audioRef.current;
-    if (audio && audio.readyState >= 1) {
-      audio.currentTime = seekRequestTime;
+    if (isPlaying) {
+      startParallelPlay(seekRequestTime);
+    } else {
+      setGlobalCurrentTime(seekRequestTime);
     }
     clearSeekRequest();
-  }, [seekRequestTime, clearSeekRequest]);
+  }, [seekRequestTime, isPlaying, startParallelPlay, setGlobalCurrentTime, clearSeekRequest]);
 
   return null;
 }

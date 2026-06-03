@@ -6,7 +6,7 @@ import { AudioEngine } from '@/components/audio/AudioEngine';
 import { InlineEditor } from '@/components/admin/InlineEditor';
 import { AdminTrackDetail } from '@/components/admin/AdminTrackDetail';
 import { SortableSidebarTrack } from '@/components/admin/SortableSidebarTrack';
-import { Plus, Trash2, AudioLines } from 'lucide-react';
+import { Plus, Trash2, AudioLines, Settings, ArrowUp, ArrowDown, X } from 'lucide-react';
 import { DndContext, closestCenter, KeyboardSensor, PointerSensor, useSensor, useSensors } from '@dnd-kit/core';
 import { SortableContext, sortableKeyboardCoordinates, verticalListSortingStrategy } from '@dnd-kit/sortable';
 
@@ -15,6 +15,17 @@ import Link from 'next/link';
 export function AdminClientLayout({ projects }: { projects: any[] }) {
   const project = useProjectStore(state => state.project);
   const [selectedTrackId, setSelectedTrackId] = useState<string | null>(null);
+
+  const [isSettingsOpen, setIsSettingsOpen] = useState(false);
+  const [tempTitle, setTempTitle] = useState(project?.title || '');
+  const [tempAlias, setTempAlias] = useState(project?.custom_alias || '');
+
+  useEffect(() => {
+    if (project) {
+      setTempTitle(project.title);
+      setTempAlias(project.custom_alias || '');
+    }
+  }, [project]);
 
   const sensors = useSensors(
     useSensor(PointerSensor),
@@ -139,6 +150,51 @@ export function AdminClientLayout({ projects }: { projects: any[] }) {
     }
   };
 
+  const handleMoveCategory = async (index: number, direction: 'up' | 'down') => {
+    const targetIndex = direction === 'up' ? index - 1 : index + 1;
+    if (targetIndex < 0 || targetIndex >= project.categories.length) return;
+    
+    // Zustand 스토어 즉시 반영
+    useProjectStore.getState().reorderCategories(index, targetIndex);
+    
+    // API 호출에 필요한 순서 갱신 리스트
+    const updatedCats = [...project.categories];
+    const [moved] = updatedCats.splice(index, 1);
+    updatedCats.splice(targetIndex, 0, moved);
+    const updates = updatedCats.map((c, idx) => ({ id: c.id, order_index: idx }));
+    
+    await fetch('/api/actions', {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({ action: 'reorderCategories', payload: { updates } })
+    });
+  };
+
+  const handleSaveProjectSettings = async () => {
+    if (!tempTitle.trim()) {
+      alert("프로젝트 이름을 입력해 주세요.");
+      return;
+    }
+    if (!tempAlias.trim()) {
+      alert("프로젝트 bias(custom_alias)를 입력해 주세요.");
+      return;
+    }
+    
+    // Zustand 스토어 즉시 반영
+    useProjectStore.getState().updateProjectSettings(tempTitle, tempAlias);
+    
+    // API 호출
+    await fetch('/api/actions', {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({ 
+        action: 'updateProjectSettings', 
+        payload: { id: project.id, title: tempTitle, custom_alias: tempAlias } 
+      })
+    });
+    setIsSettingsOpen(false);
+  };
+
   const publicUrl = `/${project.custom_alias || project.short_id || project.id}`;
 
   return (
@@ -179,27 +235,15 @@ export function AdminClientLayout({ projects }: { projects: any[] }) {
           <aside className="w-80 bg-[#15191c] border-r border-[#22272c] flex flex-col shrink-0 h-full">
             {/* Project Title Header */}
             <div className="p-4 border-b border-[#22272c] flex justify-between items-center bg-[#1c2126] shrink-0">
-              <div className="font-extrabold text-white text-lg flex items-center gap-2 min-w-0 flex-1 pr-2">
-                <InlineEditor 
-                  initialValue={project.title} 
-                  onSave={async (newTitle) => {
-                    useProjectStore.getState().setProject({ ...project, title: newTitle });
-                    await fetch('/api/actions', {
-                      method: 'POST',
-                      headers: { 'Content-Type': 'application/json' },
-                      body: JSON.stringify({ action: 'renameProject', payload: { id: project.id, title: newTitle } })
-                    });
-                  }} 
-                  isTitle={true}
-                  textClassName="text-lg font-extrabold text-white tracking-tight"
-                />
+              <div className="font-extrabold text-white text-lg flex items-center gap-2 min-w-0 flex-1 pr-2 truncate">
+                <span className="truncate" title={project.title}>{project.title}</span>
               </div>
               <button 
-                onClick={handleDeleteProject} 
-                className="text-gray-500 hover:text-red-400 p-1 transition-colors shrink-0" 
-                title="프로젝트 삭제"
+                onClick={() => setIsSettingsOpen(true)} 
+                className="text-gray-500 hover:text-white p-1 transition-colors shrink-0" 
+                title="프로젝트 설정"
               >
-                <Trash2 className="w-4 h-4" />
+                <Settings className="w-4 h-4" />
               </button>
             </div>
 
@@ -304,6 +348,105 @@ export function AdminClientLayout({ projects }: { projects: any[] }) {
           
         </div>
       </div>
+
+      {/* Project Settings Modal */}
+      {isSettingsOpen && (
+        <div className="fixed inset-0 bg-black/75 backdrop-blur-sm z-50 flex items-center justify-center p-4">
+          <div className="bg-[#161a1d] border border-[#22272c] w-full max-w-md rounded-xl shadow-2xl overflow-hidden flex flex-col text-white">
+            {/* Header */}
+            <div className="p-5 border-b border-[#22272c] flex justify-between items-center bg-[#1c2126]">
+              <h3 className="text-lg font-bold text-white">프로젝트 설정</h3>
+              <button 
+                onClick={() => setIsSettingsOpen(false)}
+                className="text-gray-400 hover:text-white transition-colors"
+              >
+                <X className="w-5 h-5" />
+              </button>
+            </div>
+            {/* Body */}
+            <div className="p-6 space-y-5 overflow-y-auto max-h-[70vh] scrollbar-hide">
+              {/* Project Name */}
+              <div className="space-y-1.5">
+                <label className="text-xs font-bold text-gray-400 uppercase tracking-wider">프로젝트 이름</label>
+                <input 
+                  type="text" 
+                  value={tempTitle}
+                  onChange={(e) => setTempTitle(e.target.value)}
+                  className="w-full bg-[#111416] border border-[#22272c] rounded px-3 py-2 text-sm text-white focus:outline-none focus:border-[#f5a623] transition-colors"
+                />
+              </div>
+              {/* Project Bias (Alias) */}
+              <div className="space-y-1.5">
+                <label className="text-xs font-bold text-gray-400 uppercase tracking-wider">프로젝트 bias (URL 주소)</label>
+                <input 
+                  type="text" 
+                  value={tempAlias}
+                  onChange={(e) => setTempAlias(e.target.value)}
+                  className="w-full bg-[#111416] border border-[#22272c] rounded px-3 py-2 text-sm text-white focus:outline-none focus:border-[#f5a623] transition-colors"
+                  placeholder="bias"
+                />
+                <p className="text-[10px] text-gray-500">공개 주소는 다음이 됩니다: /{tempAlias || 'bias'}</p>
+              </div>
+              {/* Category Reordering */}
+              <div className="space-y-2">
+                <label className="text-xs font-bold text-gray-400 uppercase tracking-wider block">카테고리 위치 설정</label>
+                <div className="border border-[#22272c] rounded-lg bg-[#111416] divide-y divide-[#22272c]/40 overflow-hidden">
+                  {project.categories.length === 0 ? (
+                    <div className="p-4 text-center text-xs text-gray-500 font-bold">생성된 카테고리가 없습니다.</div>
+                  ) : (
+                    project.categories.map((c, idx) => (
+                      <div key={c.id} className="p-3 flex items-center justify-between gap-3">
+                        <span className="text-xs font-bold text-gray-300 truncate">{c.title}</span>
+                        <div className="flex items-center gap-1 shrink-0">
+                          <button
+                            disabled={idx === 0}
+                            onClick={() => handleMoveCategory(idx, 'up')}
+                            className="p-1 hover:bg-[#1c2126] text-gray-400 hover:text-white disabled:opacity-30 disabled:pointer-events-none rounded transition-colors"
+                            title="위로 이동"
+                          >
+                            <ArrowUp className="w-3.5 h-3.5" />
+                          </button>
+                          <button
+                            disabled={idx === project.categories.length - 1}
+                            onClick={() => handleMoveCategory(idx, 'down')}
+                            className="p-1 hover:bg-[#1c2126] text-gray-400 hover:text-white disabled:opacity-30 disabled:pointer-events-none rounded transition-colors"
+                            title="아래로 이동"
+                          >
+                            <ArrowDown className="w-3.5 h-3.5" />
+                          </button>
+                        </div>
+                      </div>
+                    ))
+                  )}
+                </div>
+              </div>
+            </div>
+            {/* Footer */}
+            <div className="p-5 border-t border-[#22272c] flex justify-between items-center bg-[#1c2126]">
+              <button 
+                onClick={handleDeleteProject}
+                className="text-xs text-red-500 hover:text-red-400 font-bold flex items-center gap-1.5 px-3 py-1.5 rounded bg-red-500/10 border border-red-500/20 hover:bg-red-500/20 transition-all shrink-0"
+              >
+                <Trash2 className="w-3.5 h-3.5" /> 프로젝트 삭제
+              </button>
+              <div className="flex items-center gap-2">
+                <button 
+                  onClick={() => setIsSettingsOpen(false)}
+                  className="text-xs bg-[#111416] text-gray-400 font-bold px-3 py-1.5 rounded border border-[#22272c] hover:text-white transition-colors"
+                >
+                  취소
+                </button>
+                <button 
+                  onClick={handleSaveProjectSettings}
+                  className="text-xs bg-[#f5a623] hover:bg-[#f5a623]/80 text-black font-extrabold px-3 py-1.5 rounded transition-colors shadow-lg shadow-[#f5a623]/10"
+                >
+                  저장
+                </button>
+              </div>
+            </div>
+          </div>
+        </div>
+      )}
     </div>
   );
 }
