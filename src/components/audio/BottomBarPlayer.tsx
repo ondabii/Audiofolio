@@ -78,9 +78,10 @@ export function BottomBarPlayer() {
 
           <div className="min-w-0 flex items-center">
             {playingInfo ? (
-              <span className="text-sm font-bold text-white truncate">
-                {playingInfo.trackTitle} <span className="text-primary font-medium ml-1.5">{playingInfo.versionTitle}</span>
-              </span>
+              <div className="flex flex-col text-sm font-bold truncate leading-snug">
+                <span className="text-white truncate">{playingInfo.trackTitle}</span>
+                <span className="text-primary font-medium text-xs truncate">{playingInfo.versionTitle}</span>
+              </div>
             ) : (
               <div className="flex items-center gap-2 text-gray-500 text-sm font-bold">
                 <span className="w-1.5 h-1.5 rounded-full bg-gray-600 animate-pulse"></span>

@@ -146,7 +146,9 @@ export function AdminTrackItem({ track }: { track: any }) {
                 </div>
                 <div className="hidden md:flex gap-2 text-xs">
                   <span className="bg-black/50 text-gray-400 px-1.5 py-0.5 rounded border border-gray-700/50 uppercase">{version.file_format || 'WAV'}</span>
-                  {version.bitrate && <span className="bg-black/50 text-gray-400 px-1.5 py-0.5 rounded border border-gray-700/50 uppercase">{version.bitrate}kbps</span>}
+                  {version.bitrate ? (
+                    <span className="bg-black/50 text-gray-400 px-1.5 py-0.5 rounded border border-gray-700/50 uppercase">{version.bitrate}kbps</span>
+                  ) : null}
                 </div>
               </div>
               <div className={`flex items-center gap-3 ${!isRep && 'opacity-0 group-hover/version:opacity-100'} transition-opacity self-end sm:self-auto`}>

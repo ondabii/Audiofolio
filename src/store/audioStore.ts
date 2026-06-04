@@ -11,6 +11,8 @@ interface AudioStoreState {
   playingVersionId: string | null;
   // 전체 기준 재생 시간 (초 단위)
   globalCurrentTime: number;
+  // 루프 바운딩이 없는 생 재생 시간 (초 단위, 플레이헤드 싱크용)
+  rawCurrentTime: number;
   // 재생 중 여부
   isPlaying: boolean;
   // 버퍼링 순차 대기열 (N-1, N+1 순)
@@ -27,6 +29,7 @@ interface AudioStoreState {
   // Actions
   setPlayingVersionId: (id: string | null) => void;
   setGlobalCurrentTime: (time: number) => void;
+  setRawCurrentTime: (time: number) => void;
   setIsPlaying: (isPlaying: boolean) => void;
   setLoadingQueue: (queue: string[]) => void;
   updateVersionState: (id: string, state: Partial<VersionState>) => void;
@@ -39,6 +42,7 @@ interface AudioStoreState {
 export const useAudioStore = create<AudioStoreState>((set) => ({
   playingVersionId: null,
   globalCurrentTime: 0,
+  rawCurrentTime: 0,
   isPlaying: false,
   loadingQueue: [],
   versionStates: {},
@@ -47,6 +51,7 @@ export const useAudioStore = create<AudioStoreState>((set) => ({
 
   setPlayingVersionId: (id) => set({ playingVersionId: id }),
   setGlobalCurrentTime: (time) => set({ globalCurrentTime: time }),
+  setRawCurrentTime: (time) => set({ rawCurrentTime: time }),
   setIsPlaying: (isPlaying) => set({ isPlaying }),
   setLoadingQueue: (queue) => set({ loadingQueue: queue }),
   updateVersionState: (id, state) => set((prev) => ({
@@ -64,6 +69,7 @@ export const useAudioStore = create<AudioStoreState>((set) => ({
   resetAudioState: () => set({
     playingVersionId: null,
     globalCurrentTime: 0,
+    rawCurrentTime: 0,
     isPlaying: false,
     loadingQueue: [],
     versionStates: {},

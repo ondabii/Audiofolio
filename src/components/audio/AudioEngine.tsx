@@ -3,19 +3,13 @@
 import { useEffect, useRef, useCallback } from 'react';
 import { useAudioStore } from '@/store/audioStore';
 
-/**
- * 오디오 재생 엔진 — <audio> 엘리먼트 기반
- *
- * Web Audio API(AudioContext)는 브라우저 Autoplay 정책으로 인한
- * 복잡한 타이밍 문제가 있어, 신뢰성 높은 <audio> 엘리먼트로 대체.
- * 파형 시각화는 waveform_data(DB)를 사용하므로 AudioContext 불필요.
- */
 export function AudioEngine({ trackVersions = [] }: { trackVersions: any[] }) {
   const {
     playingVersionId,
     isPlaying,
     seekRequestTime,
     setGlobalCurrentTime,
+    setRawCurrentTime,
     updateVersionState,
     clearSeekRequest,
   } = useAudioStore();
@@ -72,13 +66,15 @@ export function AudioEngine({ trackVersions = [] }: { trackVersions: any[] }) {
       const ctx = audioCtxRef.current;
       if (ctx && isPlayingRef.current && maxDuration > 0) {
         const elapsed = ctx.currentTime - startTimeRef.current;
-        const current = (elapsed + startOffsetRef.current) % maxDuration;
+        const currentRaw = elapsed + startOffsetRef.current;
+        const current = currentRaw % maxDuration;
         setGlobalCurrentTime(current);
+        setRawCurrentTime(currentRaw);
       }
       rafRef.current = requestAnimationFrame(tick);
     };
     rafRef.current = requestAnimationFrame(tick);
-  }, [stopSync, setGlobalCurrentTime]);
+  }, [stopSync, setGlobalCurrentTime, setRawCurrentTime]);
 
   // ─── 활성 오디오 소스 노드 클린업 ───
   const stopAllSources = useCallback(() => {
@@ -132,9 +128,8 @@ export function AudioEngine({ trackVersions = [] }: { trackVersions: any[] }) {
     
     buffersRef.current[id] = audioBuffer;
     
-    const durationMs = version.duration_ms > 0 
-      ? version.duration_ms 
-      : Math.round(audioBuffer.duration * 1000);
+    // DB의 오차 오류가 있을 수 있으므로 디코딩된 PCM 실제 버퍼의 길이를 절대 기준으로 갱신
+    const durationMs = Math.round(audioBuffer.duration * 1000);
       
     updateVersionState(id, { isReady: true, durationMs });
     
@@ -162,57 +157,109 @@ export function AudioEngine({ trackVersions = [] }: { trackVersions: any[] }) {
     const siblingVersions = trackVersions.filter(v => v.track_id === targetVersion.track_id);
     const siblingIds = siblingVersions.map(v => v.id);
 
-    // 재생을 준비하기 위해 트랙 내 모든 버전을 병렬로 디코딩 로드
-    const buffersToPlay: { id: string; buffer: AudioBuffer }[] = [];
-    let maxDuration = 0;
-
-    for (const ver of siblingVersions) {
-      try {
-        const buf = await loadAudioBuffer(ver);
-        // 비동기 대기 후 태스크가 폐기되었는지 체크
-        if (taskId !== playTaskIdRef.current) return;
-
-        buffersToPlay.push({ id: ver.id, buffer: buf });
-        if (buf.duration > maxDuration) {
-          maxDuration = buf.duration;
-        }
-      } catch (e) {
-        console.error(`오디오 로딩 실패: ${ver.title}`, e);
+    // 버전 순서 정렬: targetVersion이 0순위, N-1, N+1, N-2, N+2... 순
+    const targetIndex = siblingVersions.findIndex(v => v.id === playingVersionId);
+    const sortedSiblings = [...siblingVersions].sort((a, b) => {
+      const idxA = siblingVersions.indexOf(a);
+      const idxB = siblingVersions.indexOf(b);
+      const distA = Math.abs(idxA - targetIndex);
+      const distB = Math.abs(idxB - targetIndex);
+      if (distA !== distB) {
+        return distA - distB;
       }
+      return idxA - idxB;
+    });
+
+    // 1. 재생하기로 선택한 버전(targetVersion)을 먼저 로드
+    let targetBuf: AudioBuffer;
+    try {
+      targetBuf = await loadAudioBuffer(targetVersion);
+      if (taskId !== playTaskIdRef.current) return;
+    } catch (e) {
+      console.error(`재생 대상 오디오 로딩 실패: ${targetVersion.title}`, e);
+      return;
     }
 
-    if (taskId !== playTaskIdRef.current) return;
-    if (buffersToPlay.length === 0 || maxDuration === 0) return;
-
+    // 2. targetVersion 로드 성공 즉시 재생 기동
     const startTime = ctx.currentTime;
     startTimeRef.current = startTime;
     startOffsetRef.current = targetOffset;
     isPlayingRef.current = true;
     activeVersionIdsRef.current = siblingIds;
 
-    // ── 모든 채널 동시 기동 및 볼륨 Gain 지정 ──
-    buffersToPlay.forEach(({ id, buffer }) => {
-      const source = ctx.createBufferSource();
-      source.buffer = buffer;
-      source.loop = true; // PCM 하드웨어 레벨 Gapless Loop 활성화
+    // 미리 전체 최대 길이 산출 (duration_ms 기준)
+    let maxDuration = siblingVersions.reduce((max, v) => {
+      const vDur = v.duration_ms > 0 ? v.duration_ms / 1000 : 0;
+      return Math.max(max, vDur);
+    }, 0);
+    if (maxDuration === 0) {
+      maxDuration = targetBuf.duration;
+    }
 
-      const gainNode = ctx.createGain();
-      const volume = id === playingVersionId ? 1.0 : 0.0;
-      gainNode.gain.setValueAtTime(volume, startTime);
+    const targetSource = ctx.createBufferSource();
+    targetSource.buffer = targetBuf;
+    targetSource.loop = true;
 
-      source.connect(gainNode);
-      // 마스터 볼륨 게인 노드에 커넥트
-      gainNode.connect(getMasterGain());
+    const targetGain = ctx.createGain();
+    targetGain.gain.setValueAtTime(1.0, startTime);
 
-      // 버퍼 루프 랩어라운드를 감안한 개별 시작 오프셋
-      const offset = targetOffset % buffer.duration;
-      source.start(startTime, offset);
+    targetSource.connect(targetGain);
+    targetGain.connect(getMasterGain());
 
-      sourcesRef.current[id] = source;
-      gainsRef.current[id] = gainNode;
-    });
+    const targetOffsetCalculated = targetOffset % targetBuf.duration;
+    targetSource.start(startTime, targetOffsetCalculated);
 
+    sourcesRef.current[targetVersion.id] = targetSource;
+    gainsRef.current[targetVersion.id] = targetGain;
+
+    // 타임라인 동기화 즉시 기동
     startSync(maxDuration);
+
+    // 3. 나머지 버전을 N-1, N+1 순차적으로 백그라운드 로드
+    const remainingVersions = sortedSiblings.filter(v => v.id !== targetVersion.id);
+
+    (async () => {
+      let currentMaxDuration = maxDuration;
+      for (const ver of remainingVersions) {
+        if (taskId !== playTaskIdRef.current) return;
+        try {
+          const buf = await loadAudioBuffer(ver);
+          if (taskId !== playTaskIdRef.current) return;
+
+          // 만약 새로 로드된 버전이 이전의 maxDuration보다 길다면 maxDuration 확장 및 타이머 재기동
+          if (buf.duration > currentMaxDuration) {
+            currentMaxDuration = buf.duration;
+            startSync(currentMaxDuration);
+          }
+
+          const now = ctx.currentTime;
+          const elapsed = now - startTimeRef.current;
+          const currentTimelineTime = (elapsed + startOffsetRef.current) % currentMaxDuration;
+          const offset = currentTimelineTime % buf.duration;
+
+          const source = ctx.createBufferSource();
+          source.buffer = buf;
+          source.loop = true;
+
+          const gainNode = ctx.createGain();
+          
+          // 로드되는 시점에 타겟 버전으로 바뀌었을 수도 있으니 스토어 값 실시간 체크
+          const isCurrent = useAudioStore.getState().playingVersionId === ver.id;
+          const volume = isCurrent ? 1.0 : 0.0;
+          gainNode.gain.setValueAtTime(volume, now);
+
+          source.connect(gainNode);
+          gainNode.connect(getMasterGain());
+
+          source.start(now, offset);
+
+          sourcesRef.current[ver.id] = source;
+          gainsRef.current[ver.id] = gainNode;
+        } catch (e) {
+          console.error(`백그라운드 오디오 로딩 실패: ${ver.title}`, e);
+        }
+      }
+    })();
   }, [playingVersionId, trackVersions, getAudioContext, stopAllSources, loadAudioBuffer, startSync, getMasterGain]);
 
   // ─── playingVersionId 변경 처리 (0ms 크로스페이드 AB 스위칭) ───
@@ -240,23 +287,34 @@ export function AudioEngine({ trackVersions = [] }: { trackVersions: any[] }) {
       });
     } else {
       // ── 새로운 트랙 재생: 병렬 노드 구성 재로드 ──
+      const targetVersion = trackVersions.find(v => v.id === playingVersionId);
+      const prevActiveVersionId = Object.keys(sourcesRef.current)[0];
+      const prevVersion = prevActiveVersionId ? trackVersions.find(v => v.id === prevActiveVersionId) : null;
+      const isSameTrack = prevVersion && targetVersion && prevVersion.track_id === targetVersion.track_id;
+
+      if (!isSameTrack) {
+        // 완전히 다른 트랙으로 전환되는 것이므로 재생 경과 시간을 0초로 리셋!
+        setGlobalCurrentTime(0);
+        setRawCurrentTime(0);
+      }
+
       if (isPlaying) {
-        startParallelPlay(0);
+        const targetTime = isSameTrack ? useAudioStore.getState().rawCurrentTime : 0;
+        startParallelPlay(targetTime);
       } else {
-        const targetVersion = trackVersions.find(v => v.id === playingVersionId);
         if (targetVersion) {
           loadAudioBuffer(targetVersion).catch(e => console.error(e));
         }
       }
     }
-  }, [playingVersionId, trackVersions, isPlaying, getAudioContext, startParallelPlay, loadAudioBuffer, stopAllSources]);
+  }, [playingVersionId, trackVersions, isPlaying, getAudioContext, startParallelPlay, loadAudioBuffer, stopAllSources, setGlobalCurrentTime, setRawCurrentTime]);
 
   // ─── isPlaying 변경 처리 ───
   useEffect(() => {
     if (isPlaying) {
       if (!isPlayingRef.current && playingVersionId) {
         const store = useAudioStore.getState();
-        startParallelPlay(store.globalCurrentTime);
+        startParallelPlay(store.rawCurrentTime);
       }
     } else {
       stopAllSources();
@@ -271,9 +329,10 @@ export function AudioEngine({ trackVersions = [] }: { trackVersions: any[] }) {
       startParallelPlay(seekRequestTime);
     } else {
       setGlobalCurrentTime(seekRequestTime);
+      setRawCurrentTime(seekRequestTime);
     }
     clearSeekRequest();
-  }, [seekRequestTime, isPlaying, startParallelPlay, setGlobalCurrentTime, clearSeekRequest]);
+  }, [seekRequestTime, isPlaying, startParallelPlay, setGlobalCurrentTime, setRawCurrentTime, clearSeekRequest]);
 
   // ─── 볼륨 변경 처리 ───
   const volume = useAudioStore(state => state.volume);

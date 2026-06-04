@@ -63,11 +63,11 @@ export function TrackItem({ track, readOnly = false }: { track: any; readOnly?: 
     });
   };
 
-  // 각 버전 별 실제 재생 길이(초) 결정 함수
+  // 각 버전 별 실제 재생 길이(초) 결정 함수 (디코딩된 실제 오디오 데이터의 길이를 최우선 순위로 지정)
   const getVersionDuration = (v: any): number => {
-    if (v.duration_ms && v.duration_ms > 0) return v.duration_ms / 1000;
     const st = versionStates[v.id];
     if (st?.durationMs && st.durationMs > 0) return st.durationMs / 1000;
+    if (v.duration_ms && v.duration_ms > 0) return v.duration_ms / 1000;
     return 0;
   };
 
@@ -188,29 +188,30 @@ function VersionProgressBar({
   isReady: boolean;
   isRep: boolean;
 }) {
-  const globalCurrentTime = useAudioStore(state => state.globalCurrentTime);
+  const rawCurrentTime = useAudioStore(state => state.rawCurrentTime);
   const playingVersionId = useAudioStore(state => state.playingVersionId);
   const isPlaying = useAudioStore(state => state.isPlaying);
   const setPlayingVersionId = useAudioStore(state => state.setPlayingVersionId);
   const setIsPlaying = useAudioStore(state => state.setIsPlaying);
-
+ 
   const isCurrent = playingVersionId === version.id;
-
-  // 스펙트럼 너비 비율 (전체 가로폭을 15% 감축하여 85% 최대 너비 지정)
+ 
+  // 스펙트럼 너비 비율
   const spectrumWidthPercent =
-    (maxDuration > 0 && versionDuration > 0
+    maxDuration > 0 && versionDuration > 0
       ? Math.min((versionDuration / maxDuration) * 100, 100)
-      : 100) * 0.85;
-
-  // 재생 진행 퍼센트
+      : 100;
+ 
+  // 재생 진행 퍼센트 (누적 시간 rawCurrentTime 기준 오차 없는 모듈로 연산 적용)
   let progressPercent = 0;
   if (isPlayingTrack && isPlaying && versionDuration > 0) {
-    const localTime = globalCurrentTime % versionDuration;
+    const localTime = rawCurrentTime % versionDuration;
     progressPercent = Math.min((localTime / versionDuration) * 100, 100);
   } else if (isCurrent && versionDuration > 0) {
-    progressPercent = Math.min((globalCurrentTime / versionDuration) * 100, 100);
+    const localTime = rawCurrentTime % versionDuration;
+    progressPercent = Math.min((localTime / versionDuration) * 100, 100);
   }
-
+ 
   // waveform_data 파싱
   let waveformBars: number[] = [];
   try {
@@ -221,10 +222,10 @@ function VersionProgressBar({
       if (Array.isArray(parsed)) waveformBars = parsed;
     }
   } catch (e) {}
-
+ 
   // 형식 표시에서 "Audio/" 프리픽스 삭제
   const displayFormat = (version.file_format || 'WAV').replace(/^AUDIO\//i, '').toUpperCase();
-
+ 
   return (
     <div
       className={`h-full bg-[#1c2126] ${
@@ -256,13 +257,17 @@ function VersionProgressBar({
         }
       }}
     >
-      {/* ── 버전 이름 (스펙트럼 좌측 상단 절대 위치 배치) ── */}
-      <div className="absolute left-2.5 top-1.5 z-10 pointer-events-none select-none max-w-[70%]">
-        <span className={`truncate text-xs ${isRep ? 'font-bold text-primary' : 'font-medium text-gray-400'}`}>
+      {/* ── 버전 이름 (스펙트럼 좌측 상단 메타데이터형 캡슐화) ── */}
+      <div className="absolute left-2.5 top-1.5 z-10 pointer-events-none select-none max-w-[75%]">
+        <span
+          className={`bg-black/50 border-gray-700/50 text-[10px] px-2 py-0.5 rounded border backdrop-blur-sm truncate inline-block ${
+            isRep ? 'font-bold text-primary border-primary/30' : 'font-medium text-gray-400'
+          }`}
+        >
           {version.title || `v${version.order_index}`}
         </span>
       </div>
-
+ 
       {/* 진행 배경 */}
       {isPlayingTrack && (
         <div
@@ -270,7 +275,7 @@ function VersionProgressBar({
           style={{ width: `${progressPercent}%` }}
         />
       )}
-
+ 
       {/* 재생선(Playhead) */}
       {isPlayingTrack && versionDuration > 0 && (
         <div
@@ -280,18 +285,27 @@ function VersionProgressBar({
           }}
         />
       )}
-
+ 
       {/* 버퍼링 스트라이프 */}
       {!isReady && <div className="absolute inset-0 bg-stripes animate-pulse z-0" />}
-
-      {/* 파형 막대 시각화: 대표 여부 관계없이 기본 회색, 재생선 도달 구간만 노란색 채우기 */}
+ 
+      {/* 파형 막대 시각화 */}
       {waveformBars.length > 0 && (
         <div className="absolute inset-0 flex items-center px-0 z-[1] pointer-events-none" style={{ gap: '1px' }}>
           {waveformBars.map((val, i) => {
             const isPassed = isPlayingTrack && (i / waveformBars.length) * 100 < progressPercent;
-            const barColor = isPassed
-              ? 'rgba(245, 166, 35, 0.85)' // 노란색 (지나간 곳)
-              : 'rgba(255, 255, 255, 0.12)'; // 기본 회색 (아직 안 지나간 곳)
+            
+            let barColor = 'rgba(255, 255, 255, 0.12)'; // 기본 회색 (로드 안 됨 혹은 아직 안 지나간 구간)
+            
+            if (isReady) {
+              if (isPassed) {
+                if (isCurrent && isPlayingTrack) {
+                  barColor = 'rgba(245, 166, 35, 0.9)'; // 재생 중인 버전 (노란색)
+                } else {
+                  barColor = 'rgba(255, 255, 255, 0.85)'; // 재생 중이지 않은 버전 (하얀색)
+                }
+              }
+            }
 
             return (
               <div
@@ -306,7 +320,7 @@ function VersionProgressBar({
           })}
         </div>
       )}
-
+ 
       {/* 포맷/비트레이트 뱃지: Audio/ 프리픽스 제거 및 비대표 버전도 비트레이트 모두 노출 */}
       <div className="absolute right-1 bottom-1 flex gap-1 z-10">
         <span
