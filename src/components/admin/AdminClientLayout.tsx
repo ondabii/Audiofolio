@@ -20,6 +20,7 @@ export function AdminClientLayout({ projects }: { projects: any[] }) {
   const [isSettingsOpen, setIsSettingsOpen] = useState(false);
   const [tempTitle, setTempTitle] = useState(project?.title || '');
   const [tempAlias, setTempAlias] = useState(project?.custom_alias || '');
+  const [copied, setCopied] = useState(false);
 
   useEffect(() => {
     if (project) {
@@ -171,18 +172,24 @@ export function AdminClientLayout({ projects }: { projects: any[] }) {
     });
   };
 
+  const handleCopyLink = () => {
+    if (typeof window !== 'undefined' && project) {
+      const origin = window.location.origin;
+      const nanoidUrl = `${origin}/${project.short_id || project.id}`;
+      navigator.clipboard.writeText(nanoidUrl);
+      setCopied(true);
+      setTimeout(() => setCopied(false), 2000);
+    }
+  };
+
   const handleSaveProjectSettings = async () => {
     if (!tempTitle.trim()) {
       alert("프로젝트 이름을 입력해 주세요.");
       return;
     }
-    if (!tempAlias.trim()) {
-      alert("프로젝트 bias(custom_alias)를 입력해 주세요.");
-      return;
-    }
     
-    // Zustand 스토어 즉시 반영
-    useProjectStore.getState().updateProjectSettings(tempTitle, tempAlias);
+    // Zustand 스토어 즉시 반영 (별칭은 기존값 유지)
+    useProjectStore.getState().updateProjectSettings(tempTitle, project?.custom_alias || '');
     
     // API 호출
     await fetch('/api/actions', {
@@ -190,7 +197,7 @@ export function AdminClientLayout({ projects }: { projects: any[] }) {
       headers: { 'Content-Type': 'application/json' },
       body: JSON.stringify({ 
         action: 'updateProjectSettings', 
-        payload: { id: project.id, title: tempTitle, custom_alias: tempAlias } 
+        payload: { id: project.id, title: tempTitle, custom_alias: project.custom_alias || '' } 
       })
     });
     setIsSettingsOpen(false);
@@ -377,17 +384,65 @@ export function AdminClientLayout({ projects }: { projects: any[] }) {
                   className="w-full bg-[#111416] border border-[#22272c] rounded px-3 py-2 text-sm text-white focus:outline-none focus:border-[#f5a623] transition-colors"
                 />
               </div>
-              {/* Project Bias (Alias) */}
+
+              {/* 원래 프로젝트 고유 주소 (NanoID) 및 복사 */}
               <div className="space-y-1.5">
-                <label className="text-xs font-bold text-gray-400 uppercase tracking-wider">프로젝트 bias (URL 주소)</label>
-                <input 
-                  type="text" 
-                  value={tempAlias}
-                  onChange={(e) => setTempAlias(e.target.value)}
-                  className="w-full bg-[#111416] border border-[#22272c] rounded px-3 py-2 text-sm text-white focus:outline-none focus:border-[#f5a623] transition-colors"
-                  placeholder="bias"
-                />
-                <p className="text-[10px] text-gray-500">공개 주소는 다음이 됩니다: /{tempAlias || 'bias'}</p>
+                <label className="text-xs font-bold text-gray-400 uppercase tracking-wider block">원래 고유 주소 (NanoID)</label>
+                <div className="flex gap-2">
+                  <input 
+                    type="text" 
+                    readOnly
+                    value={typeof window !== 'undefined' ? `${window.location.origin}/${project.short_id || project.id}` : `/${project.short_id || project.id}`}
+                    className="flex-1 bg-[#111416] border border-[#22272c] rounded px-3 py-2 text-xs text-gray-400 select-all outline-none"
+                  />
+                  <button 
+                    onClick={handleCopyLink}
+                    className="bg-[#1c2126] hover:bg-[#252b31] border border-[#22272c] text-xs font-bold px-3 py-2 rounded text-white transition-colors shrink-0"
+                  >
+                    {copied ? '복사됨!' : '주소 복사'}
+                  </button>
+                </div>
+              </div>
+
+              {/* 프로젝트 Bias (별칭 별도 저장 카드) */}
+              <div className="space-y-2.5 p-4 border border-[#22272c]/60 rounded-lg bg-[#111416]/50">
+                <label className="text-xs font-bold text-gray-400 uppercase tracking-wider block">프로젝트 별칭 (bias)</label>
+                <div className="flex gap-2">
+                  <input 
+                    type="text" 
+                    value={tempAlias}
+                    onChange={(e) => setTempAlias(e.target.value)}
+                    className="flex-1 bg-[#111416] border border-[#22272c] rounded px-3 py-2 text-sm text-white focus:outline-none focus:border-[#f5a623] transition-colors"
+                    placeholder="별칭 입력 (예: my-portfolio)"
+                  />
+                  <button 
+                    onClick={async () => {
+                      if (!tempAlias.trim()) {
+                        alert("별칭(bias)을 입력해 주세요.");
+                        return;
+                      }
+                      // Zustand 스토어 즉시 반영
+                      useProjectStore.getState().updateProjectSettings(project.title, tempAlias);
+                      
+                      // API 호출
+                      await fetch('/api/actions', {
+                        method: 'POST',
+                        headers: { 'Content-Type': 'application/json' },
+                        body: JSON.stringify({ 
+                          action: 'updateProjectSettings', 
+                          payload: { id: project.id, title: project.title, custom_alias: tempAlias } 
+                        })
+                      });
+                      alert("별칭(bias)이 설정되었습니다. 기존 주소와 별칭 주소 둘 다 접근할 수 있습니다.");
+                    }}
+                    className="bg-[#f5a623] hover:bg-[#f5a623]/80 text-black text-xs font-extrabold px-3.5 py-2 rounded transition-colors shrink-0 shadow-lg shadow-[#f5a623]/10"
+                  >
+                    별칭 저장
+                  </button>
+                </div>
+                <p className="text-[10px] text-gray-500 leading-normal whitespace-pre-line">
+                  {tempAlias ? `지정 시 두 주소로 모두 접근 가능합니다:\n/${project.short_id} 및 /${tempAlias}` : '별칭을 지정하여 자신만의 단축 URL을 설정하세요.'}
+                </p>
               </div>
               {/* Category Reordering */}
               <div className="space-y-2">

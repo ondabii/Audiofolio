@@ -29,11 +29,11 @@ export function PublicClientLayout() {
           <h1 className="hidden lg:block text-2xl font-bold text-white tracking-tight flex-1">
             {project.title}
           </h1>
-          {project.is_protected && (
+          {project.is_protected ? (
             <div className="hidden lg:flex items-center gap-2 text-sm text-gray-500">
               <Lock className="w-4 h-4" /> PIN Protected
             </div>
-          )}
+          ) : null}
         </div>
         
         {project.categories.map((category) => (

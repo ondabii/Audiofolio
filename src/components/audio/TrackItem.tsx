@@ -202,12 +202,9 @@ function VersionProgressBar({
       ? Math.min((versionDuration / maxDuration) * 100, 100)
       : 100;
  
-  // 재생 진행 퍼센트 (누적 시간 rawCurrentTime 기준 오차 없는 모듈로 연산 적용)
+  // 재생 진행 퍼센트 (누적 시간 rawCurrentTime 기준 오차 없는 모듈로 연산 적용, 일시정지 시에도 위치 유지)
   let progressPercent = 0;
-  if (isPlayingTrack && isPlaying && versionDuration > 0) {
-    const localTime = rawCurrentTime % versionDuration;
-    progressPercent = Math.min((localTime / versionDuration) * 100, 100);
-  } else if (isCurrent && versionDuration > 0) {
+  if (versionDuration > 0) {
     const localTime = rawCurrentTime % versionDuration;
     progressPercent = Math.min((localTime / versionDuration) * 100, 100);
   }
@@ -293,7 +290,7 @@ function VersionProgressBar({
       {waveformBars.length > 0 && (
         <div className="absolute inset-0 flex items-center px-0 z-[1] pointer-events-none" style={{ gap: '1px' }}>
           {waveformBars.map((val, i) => {
-            const isPassed = isPlayingTrack && (i / waveformBars.length) * 100 < progressPercent;
+            const isPassed = isPlayingTrack && ((i + 1) / waveformBars.length) * 100 <= progressPercent;
             
             let barColor = 'rgba(255, 255, 255, 0.12)'; // 기본 회색 (로드 안 됨 혹은 아직 안 지나간 구간)
             
