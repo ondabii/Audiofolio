@@ -216,7 +216,7 @@ export function AdminClientLayout({ projects }: { projects: any[] }) {
             href="/admin"
             className="text-sm bg-[#1c2126] text-gray-300 font-bold px-4 py-2 rounded hover:text-white hover:bg-[#252b31] transition-colors border border-[#22272c]"
           >
-            대시보드 ↗
+            대시보드
           </a>
           <a 
             href={publicUrl}
@@ -224,7 +224,7 @@ export function AdminClientLayout({ projects }: { projects: any[] }) {
             rel="noopener noreferrer"
             className="text-sm bg-[#1c2126] text-gray-300 font-bold px-4 py-2 rounded hover:text-white hover:bg-[#252b31] transition-colors border border-[#22272c]"
           >
-            메인페이지 보기 ↗
+            메인페이지 보기
           </a>
         </div>
       </header>

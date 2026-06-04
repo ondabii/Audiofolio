@@ -196,11 +196,11 @@ function VersionProgressBar({
 
   const isCurrent = playingVersionId === version.id;
 
-  // 스펙트럼 너비 비율
+  // 스펙트럼 너비 비율 (전체 가로폭을 15% 감축하여 85% 최대 너비 지정)
   const spectrumWidthPercent =
-    maxDuration > 0 && versionDuration > 0
+    (maxDuration > 0 && versionDuration > 0
       ? Math.min((versionDuration / maxDuration) * 100, 100)
-      : 100;
+      : 100) * 0.85;
 
   // 재생 진행 퍼센트
   let progressPercent = 0;
@@ -296,7 +296,7 @@ function VersionProgressBar({
             return (
               <div
                 key={i}
-                className="flex-1 rounded-[1px] origin-bottom"
+                className="flex-1 rounded-full origin-bottom"
                 style={{
                   height: `${Math.max(8, (val / 100) * 85)}%`,
                   backgroundColor: barColor,
@@ -310,16 +310,14 @@ function VersionProgressBar({
       {/* 포맷/비트레이트 뱃지: Audio/ 프리픽스 제거 및 비대표 버전도 비트레이트 모두 노출 */}
       <div className="absolute right-1 bottom-1 flex gap-1 z-10">
         <span
-          className={`${
-            isRep
-              ? 'bg-primary/20 text-primary border-primary/30'
-              : 'bg-black/50 text-gray-400 border-gray-700/50'
-          } text-[9px] font-bold px-1.5 py-0.5 rounded border border-[#22272c] backdrop-blur-sm uppercase`}
+          className="bg-black/50 text-gray-400 border-gray-700/50 text-[9px] font-bold px-1.5 py-0.5 rounded border backdrop-blur-sm uppercase"
         >
           {displayFormat}
         </span>
         {version.bitrate ? (
-          <span className="bg-primary/20 text-primary text-[9px] font-bold px-1.5 py-0.5 rounded border border-primary/30 backdrop-blur-sm uppercase">
+          <span
+            className="bg-black/50 text-gray-400 border-gray-700/50 text-[9px] font-bold px-1.5 py-0.5 rounded border backdrop-blur-sm uppercase"
+          >
             {version.bitrate}kbps
           </span>
         ) : null}

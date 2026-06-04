@@ -148,10 +148,10 @@ export function AudioEngine({ trackVersions = [] }: { trackVersions: any[] }) {
       await ctx.resume();
     }
 
-    // 1. 고유한 재생 태스크 ID 생성
-    const taskId = ++playTaskIdRef.current;
-
     stopAllSources();
+
+    // stopAllSources() 호출로 증가된 값을 무시하고, 최종 발급용 고유 태스크 ID 생성
+    const taskId = ++playTaskIdRef.current;
 
     if (!playingVersionId) return;
     
@@ -278,12 +278,8 @@ export function AudioEngine({ trackVersions = [] }: { trackVersions: any[] }) {
   // ─── 볼륨 변경 처리 ───
   const volume = useAudioStore(state => state.volume);
   useEffect(() => {
-    if (audioCtxRef.current && masterGainRef.current) {
-      const time = audioCtxRef.current.currentTime;
-      masterGainRef.current.gain.cancelScheduledValues(time);
-      masterGainRef.current.gain.setValueAtTime(masterGainRef.current.gain.value, time);
-      // 10ms 램프로 노이즈 100% 차단하면서 볼륨 조정
-      masterGainRef.current.gain.linearRampToValueAtTime(volume, time + 0.01);
+    if (masterGainRef.current) {
+      masterGainRef.current.gain.value = volume;
     }
   }, [volume]);
 
