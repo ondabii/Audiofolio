@@ -4,6 +4,7 @@ import { useProjectStore } from '@/store/projectStore';
 import { Sidebar } from '@/components/layout/Sidebar';
 import { TrackItem } from '@/components/audio/TrackItem';
 import { AudioEngine } from '@/components/audio/AudioEngine';
+import { BottomBarPlayer } from '@/components/audio/BottomBarPlayer';
 import { Lock } from 'lucide-react';
 
 export function PublicClientLayout() {
@@ -18,10 +19,11 @@ export function PublicClientLayout() {
   return (
     <div className="w-full h-full flex bg-[#111416] overflow-hidden justify-center relative pl-0 lg:pl-64">
       <AudioEngine trackVersions={allVersions} />
+      <BottomBarPlayer />
 
       <Sidebar projectTitle={project.title} categories={project.categories} />
       
-      <main className="w-full max-w-4xl h-full overflow-y-auto pt-24 lg:pt-20 px-4 lg:px-10 pb-32 z-10 relative scrollbar-hide">
+      <main className="w-full max-w-4xl h-full overflow-y-auto pt-24 lg:pt-20 px-4 lg:px-10 pb-40 z-10 relative scrollbar-hide">
         <div id="top-anchor" className="absolute top-0 left-0 w-full h-1"></div>
         <div className="flex items-center justify-between mb-16">
           <h1 className="hidden lg:block text-2xl font-bold text-white tracking-tight flex-1">

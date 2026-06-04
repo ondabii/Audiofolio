@@ -3,6 +3,7 @@
 import { useState, useEffect } from 'react';
 import { useProjectStore } from '@/store/projectStore';
 import { AudioEngine } from '@/components/audio/AudioEngine';
+import { BottomBarPlayer } from '@/components/audio/BottomBarPlayer';
 import { InlineEditor } from '@/components/admin/InlineEditor';
 import { AdminTrackDetail } from '@/components/admin/AdminTrackDetail';
 import { SortableSidebarTrack } from '@/components/admin/SortableSidebarTrack';
@@ -200,6 +201,7 @@ export function AdminClientLayout({ projects }: { projects: any[] }) {
   return (
     <div className="h-screen w-screen overflow-hidden antialiased flex flex-col bg-[#111416]">
       <AudioEngine trackVersions={allVersions} />
+      <BottomBarPlayer />
       
       {/* Global Top Header */}
       <header className="h-16 flex items-center justify-between px-6 border-b border-[#22272c] shrink-0 bg-[#111416] w-full z-10">
@@ -228,7 +230,7 @@ export function AdminClientLayout({ projects }: { projects: any[] }) {
       </header>
       
       {/* 2-Pane Content Wrapper (Centered and restricted on wider screens) */}
-      <div className="flex-1 flex justify-center bg-[#111416] overflow-hidden w-full">
+      <div className="flex-1 flex justify-center bg-[#111416] overflow-hidden w-full pb-16">
         <div className="w-full lg:w-[66%] max-w-6xl flex overflow-hidden border-x border-[#22272c] bg-[#111416] h-full">
           
           {/* Left Pane: Tree/Category Sidebar Editor */}

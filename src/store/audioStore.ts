@@ -18,6 +18,9 @@ interface AudioStoreState {
   // 각 버전별 3초 버퍼 준비 상태 맵
   versionStates: Record<string, VersionState>;
   
+  // 마스터 볼륨 (0.0 ~ 1.0)
+  volume: number;
+  
   // 사용자가 Progress 바 클릭 시 요청한 탐색(Seek) 시간 (초)
   seekRequestTime: number | null;
   
@@ -27,6 +30,7 @@ interface AudioStoreState {
   setIsPlaying: (isPlaying: boolean) => void;
   setLoadingQueue: (queue: string[]) => void;
   updateVersionState: (id: string, state: Partial<VersionState>) => void;
+  setVolume: (volume: number) => void;
   requestSeek: (time: number) => void;
   clearSeekRequest: () => void;
   resetAudioState: () => void;
@@ -38,6 +42,7 @@ export const useAudioStore = create<AudioStoreState>((set) => ({
   isPlaying: false,
   loadingQueue: [],
   versionStates: {},
+  volume: 0.8,
   seekRequestTime: null,
 
   setPlayingVersionId: (id) => set({ playingVersionId: id }),
@@ -53,6 +58,7 @@ export const useAudioStore = create<AudioStoreState>((set) => ({
       }
     }
   })),
+  setVolume: (volume) => set({ volume }),
   requestSeek: (time) => set({ seekRequestTime: time }),
   clearSeekRequest: () => set({ seekRequestTime: null }),
   resetAudioState: () => set({
@@ -61,6 +67,7 @@ export const useAudioStore = create<AudioStoreState>((set) => ({
     isPlaying: false,
     loadingQueue: [],
     versionStates: {},
+    volume: 0.8,
     seekRequestTime: null
   })
 }));

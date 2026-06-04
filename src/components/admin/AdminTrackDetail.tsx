@@ -303,7 +303,7 @@ export function AdminTrackDetail({ track, projectId }: AdminTrackDetailProps) {
                         <InlineEditor 
                           initialValue={version.title || `v${version.order_index}`} 
                           onSave={async (newTitle) => handleUpdateVersion(version.id, newTitle)}
-                          textClassName={`text-sm font-bold truncate ${isRep ? 'text-white' : 'text-gray-300'}`}
+                          textClassName={`text-sm font-bold truncate ${isEffectiveRep ? 'text-white' : 'text-gray-300'}`}
                           isTitle={true}
                         />
                       </div>

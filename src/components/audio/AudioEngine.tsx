@@ -26,6 +26,9 @@ export function AudioEngine({ trackVersions = [] }: { trackVersions: any[] }) {
   // 현재 동시 가동 중인 오디오 노드 레프
   const sourcesRef = useRef<Record<string, AudioBufferSourceNode>>({});
   const gainsRef = useRef<Record<string, GainNode>>({});
+  
+  // 마스터 볼륨 게인 노드 레프
+  const masterGainRef = useRef<GainNode | null>(null);
 
   // 타임라인 계산 레프
   const startTimeRef = useRef<number>(0);
@@ -35,6 +38,9 @@ export function AudioEngine({ trackVersions = [] }: { trackVersions: any[] }) {
   // 현재 기동된 버전 ID들 및 재생 여부 레프
   const activeVersionIdsRef = useRef<string[]>([]);
   const isPlayingRef = useRef<boolean>(false);
+  
+  // 비동기 재생 경합 조건 Abort를 위한 태스크 ID 레프
+  const playTaskIdRef = useRef<number>(0);
 
   // ─── 단일 AudioContext 초기화 ───
   const getAudioContext = useCallback(() => {
@@ -43,6 +49,17 @@ export function AudioEngine({ trackVersions = [] }: { trackVersions: any[] }) {
     }
     return audioCtxRef.current;
   }, []);
+
+  // ─── 마스터 게인 노드 초기화 및 획득 ───
+  const getMasterGain = useCallback(() => {
+    const ctx = getAudioContext();
+    if (!masterGainRef.current) {
+      masterGainRef.current = ctx.createGain();
+      masterGainRef.current.gain.setValueAtTime(useAudioStore.getState().volume, ctx.currentTime);
+      masterGainRef.current.connect(ctx.destination);
+    }
+    return masterGainRef.current;
+  }, [getAudioContext]);
 
   // ─── 시간 동기화 루프 ───
   const stopSync = useCallback(() => {
@@ -65,6 +82,9 @@ export function AudioEngine({ trackVersions = [] }: { trackVersions: any[] }) {
 
   // ─── 활성 오디오 소스 노드 클린업 ───
   const stopAllSources = useCallback(() => {
+    // 진행 중인 비동기 로딩 취소
+    playTaskIdRef.current++;
+
     stopSync();
     Object.keys(sourcesRef.current).forEach(id => {
       try {
@@ -128,6 +148,9 @@ export function AudioEngine({ trackVersions = [] }: { trackVersions: any[] }) {
       await ctx.resume();
     }
 
+    // 1. 고유한 재생 태스크 ID 생성
+    const taskId = ++playTaskIdRef.current;
+
     stopAllSources();
 
     if (!playingVersionId) return;
@@ -146,6 +169,9 @@ export function AudioEngine({ trackVersions = [] }: { trackVersions: any[] }) {
     for (const ver of siblingVersions) {
       try {
         const buf = await loadAudioBuffer(ver);
+        // 비동기 대기 후 태스크가 폐기되었는지 체크
+        if (taskId !== playTaskIdRef.current) return;
+
         buffersToPlay.push({ id: ver.id, buffer: buf });
         if (buf.duration > maxDuration) {
           maxDuration = buf.duration;
@@ -155,6 +181,7 @@ export function AudioEngine({ trackVersions = [] }: { trackVersions: any[] }) {
       }
     }
 
+    if (taskId !== playTaskIdRef.current) return;
     if (buffersToPlay.length === 0 || maxDuration === 0) return;
 
     const startTime = ctx.currentTime;
@@ -174,7 +201,8 @@ export function AudioEngine({ trackVersions = [] }: { trackVersions: any[] }) {
       gainNode.gain.setValueAtTime(volume, startTime);
 
       source.connect(gainNode);
-      gainNode.connect(ctx.destination);
+      // 마스터 볼륨 게인 노드에 커넥트
+      gainNode.connect(getMasterGain());
 
       // 버퍼 루프 랩어라운드를 감안한 개별 시작 오프셋
       const offset = targetOffset % buffer.duration;
@@ -185,7 +213,7 @@ export function AudioEngine({ trackVersions = [] }: { trackVersions: any[] }) {
     });
 
     startSync(maxDuration);
-  }, [playingVersionId, trackVersions, getAudioContext, stopAllSources, loadAudioBuffer, startSync]);
+  }, [playingVersionId, trackVersions, getAudioContext, stopAllSources, loadAudioBuffer, startSync, getMasterGain]);
 
   // ─── playingVersionId 변경 처리 (0ms 크로스페이드 AB 스위칭) ───
   useEffect(() => {
@@ -246,6 +274,18 @@ export function AudioEngine({ trackVersions = [] }: { trackVersions: any[] }) {
     }
     clearSeekRequest();
   }, [seekRequestTime, isPlaying, startParallelPlay, setGlobalCurrentTime, clearSeekRequest]);
+
+  // ─── 볼륨 변경 처리 ───
+  const volume = useAudioStore(state => state.volume);
+  useEffect(() => {
+    if (audioCtxRef.current && masterGainRef.current) {
+      const time = audioCtxRef.current.currentTime;
+      masterGainRef.current.gain.cancelScheduledValues(time);
+      masterGainRef.current.gain.setValueAtTime(masterGainRef.current.gain.value, time);
+      // 10ms 램프로 노이즈 100% 차단하면서 볼륨 조정
+      masterGainRef.current.gain.linearRampToValueAtTime(volume, time + 0.01);
+    }
+  }, [volume]);
 
   return null;
 }
