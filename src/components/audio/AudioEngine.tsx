@@ -15,7 +15,9 @@ export function AudioEngine({ trackVersions = [] }: { trackVersions: any[] }) {
   } = useAudioStore();
 
   const audioCtxRef = useRef<AudioContext | null>(null);
-  const buffersRef = useRef<Record<string, AudioBuffer>>({});
+  
+  // AudioBuffer 외에도 시작/끝 무음 트리밍 지점 캐싱
+  const buffersRef = useRef<Record<string, { buffer: AudioBuffer; loopStart: number; loopEnd: number }>>({});
   
   // 현재 동시 가동 중인 오디오 노드 레프
   const sourcesRef = useRef<Record<string, AudioBufferSourceNode>>({});
@@ -111,7 +113,7 @@ export function AudioEngine({ trackVersions = [] }: { trackVersions: any[] }) {
   }, [stopAllSources]);
 
   // ─── 오디오 바이너리 fetch 및 AudioBuffer 디코딩 캐시 ───
-  const loadAudioBuffer = useCallback(async (version: any): Promise<AudioBuffer> => {
+  const loadAudioBuffer = useCallback(async (version: any): Promise<{ buffer: AudioBuffer; loopStart: number; loopEnd: number }> => {
     const id = version.id;
     if (buffersRef.current[id]) {
       return buffersRef.current[id];
@@ -126,14 +128,57 @@ export function AudioEngine({ trackVersions = [] }: { trackVersions: any[] }) {
     const ctx = getAudioContext();
     const audioBuffer = await ctx.decodeAudioData(arrayBuffer);
     
-    buffersRef.current[id] = audioBuffer;
+    // 🔍 Intelligent Silence Trimmer (Vorbis/MP3 디코더 패딩 제거용 40ms 윈도우 가드 탑재)
+    const channelData = audioBuffer.getChannelData(0); // 1번 채널 기준으로 무음구간 분석
+    const len = channelData.length;
+    const sampleRate = audioBuffer.sampleRate;
     
-    // DB의 오차 오류가 있을 수 있으므로 디코딩된 PCM 실제 버퍼의 길이를 절대 기준으로 갱신
-    const durationMs = Math.round(audioBuffer.duration * 1000);
-      
+    // 임계치 설정 (-66dB 수준의 노이즈 컷오프 0.0005)
+    const threshold = 0.0005;
+    
+    // 1. 시작 무음부 (Vorbis/MP3 디코더 지연) 감지 - 극초반 40ms 이내에서만 분석
+    let startIndex = 0;
+    const startScanLimit = Math.min(len, Math.floor(sampleRate * 0.04));
+    for (let i = 0; i < startScanLimit; i++) {
+      if (Math.abs(channelData[i]) > threshold) {
+        startIndex = i;
+        break;
+      }
+    }
+    
+    // 2. 끝 무음부 (Vorbis/MP3 디코더 패딩) 감지 - 극후반 40ms 이내에서만 역방향 분석
+    let endIndex = len - 1;
+    const endScanLimit = Math.max(0, len - Math.floor(sampleRate * 0.04));
+    for (let i = len - 1; i >= endScanLimit; i--) {
+      if (Math.abs(channelData[i]) > threshold) {
+        endIndex = i;
+        break;
+      }
+    }
+    
+    // 안전 장치: 음원 알맹이가 90% 이상 온전히 보존된 경우에만 무음 절단
+    const minSamples = Math.floor(len * 0.90);
+    if (endIndex - startIndex < minSamples) {
+      startIndex = 0;
+      endIndex = len - 1;
+    }
+    
+    const loopStart = startIndex / sampleRate;
+    const loopEnd = (endIndex + 1) / sampleRate;
+    
+    const cached = {
+      buffer: audioBuffer,
+      loopStart,
+      loopEnd
+    };
+    
+    buffersRef.current[id] = cached;
+    
+    // 실제 소리가 시작되고 끝나는 유효 재생 시간을 기준치로 산출
+    const durationMs = Math.round((loopEnd - loopStart) * 1000);
     updateVersionState(id, { isReady: true, durationMs });
     
-    return audioBuffer;
+    return cached;
   }, [getAudioContext, updateVersionState]);
 
   // ─── 병렬 재생 기동 엔진 ───
@@ -171,14 +216,17 @@ export function AudioEngine({ trackVersions = [] }: { trackVersions: any[] }) {
     });
 
     // 1. 재생하기로 선택한 버전(targetVersion)을 먼저 로드
-    let targetBuf: AudioBuffer;
+    let cachedTarget: { buffer: AudioBuffer; loopStart: number; loopEnd: number };
     try {
-      targetBuf = await loadAudioBuffer(targetVersion);
+      cachedTarget = await loadAudioBuffer(targetVersion);
       if (taskId !== playTaskIdRef.current) return;
     } catch (e) {
       console.error(`재생 대상 오디오 로딩 실패: ${targetVersion.title}`, e);
       return;
     }
+
+    const { buffer: targetBuf, loopStart: targetLoopStart, loopEnd: targetLoopEnd } = cachedTarget;
+    const targetDuration = targetLoopEnd - targetLoopStart;
 
     // 2. targetVersion 로드 성공 즉시 재생 기동
     const startTime = ctx.currentTime;
@@ -187,18 +235,20 @@ export function AudioEngine({ trackVersions = [] }: { trackVersions: any[] }) {
     isPlayingRef.current = true;
     activeVersionIdsRef.current = siblingIds;
 
-    // 미리 전체 최대 길이 산출 (duration_ms 기준)
+    // 미리 전체 최대 길이 산출 (트리밍된 duration 기준)
     let maxDuration = siblingVersions.reduce((max, v) => {
       const vDur = v.duration_ms > 0 ? v.duration_ms / 1000 : 0;
       return Math.max(max, vDur);
     }, 0);
     if (maxDuration === 0) {
-      maxDuration = targetBuf.duration;
+      maxDuration = targetDuration;
     }
 
     const targetSource = ctx.createBufferSource();
     targetSource.buffer = targetBuf;
     targetSource.loop = true;
+    targetSource.loopStart = targetLoopStart;
+    targetSource.loopEnd = targetLoopEnd;
 
     const targetGain = ctx.createGain();
     targetGain.gain.setValueAtTime(1.0, startTime);
@@ -206,7 +256,8 @@ export function AudioEngine({ trackVersions = [] }: { trackVersions: any[] }) {
     targetSource.connect(targetGain);
     targetGain.connect(getMasterGain());
 
-    const targetOffsetCalculated = targetOffset % targetBuf.duration;
+    // 0~duration 타임라인을 loopStart~loopEnd 윈도우 위상으로 맵핑 매칭
+    const targetOffsetCalculated = (targetOffset % targetDuration) + targetLoopStart;
     targetSource.start(startTime, targetOffsetCalculated);
 
     sourcesRef.current[targetVersion.id] = targetSource;
@@ -223,23 +274,30 @@ export function AudioEngine({ trackVersions = [] }: { trackVersions: any[] }) {
       for (const ver of remainingVersions) {
         if (taskId !== playTaskIdRef.current) return;
         try {
-          const buf = await loadAudioBuffer(ver);
+          const cachedBuf = await loadAudioBuffer(ver);
           if (taskId !== playTaskIdRef.current) return;
 
+          const { buffer: buf, loopStart: bStart, loopEnd: bEnd } = cachedBuf;
+          const bDuration = bEnd - bStart;
+
           // 만약 새로 로드된 버전이 이전의 maxDuration보다 길다면 maxDuration 확장 및 타이머 재기동
-          if (buf.duration > currentMaxDuration) {
-            currentMaxDuration = buf.duration;
+          if (bDuration > currentMaxDuration) {
+            currentMaxDuration = bDuration;
             startSync(currentMaxDuration);
           }
 
           const now = ctx.currentTime;
           const elapsed = now - startTimeRef.current;
           const currentTimelineTime = (elapsed + startOffsetRef.current) % currentMaxDuration;
-          const offset = currentTimelineTime % buf.duration;
+          
+          // 위상 매핑 동기화 기동 오프셋 계산
+          const offset = (currentTimelineTime % bDuration) + bStart;
 
           const source = ctx.createBufferSource();
           source.buffer = buf;
           source.loop = true;
+          source.loopStart = bStart;
+          source.loopEnd = bEnd;
 
           const gainNode = ctx.createGain();
           
