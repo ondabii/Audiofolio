@@ -40,6 +40,9 @@ export function AudioEngine({ trackVersions = [] }: { trackVersions: TrackVersio
   const sourcesRef = useRef<Record<string, AudioBufferSourceNode>>({});
   const gainsRef = useRef<Record<string, GainNode>>({});
   
+  // 페이드아웃 진행 중인 유령 노드들의 안전한 정지 관리를 위한 GC 레프
+  const fadingNodesRef = useRef<{ id: string; source: AudioBufferSourceNode; gain: GainNode }[]>([]);
+  
   // 마스터 볼륨 게인 노드 레프
   const masterGainRef = useRef<GainNode | null>(null);
 
@@ -103,6 +106,8 @@ export function AudioEngine({ trackVersions = [] }: { trackVersions: TrackVersio
     playTaskIdRef.current++;
 
     stopSync();
+
+    // 1. 활성 소스 및 게인 즉각 정리
     Object.keys(sourcesRef.current).forEach(id => {
       try {
         sourcesRef.current[id].stop();
@@ -117,6 +122,19 @@ export function AudioEngine({ trackVersions = [] }: { trackVersions: TrackVersio
       } catch (e) {}
     });
     gainsRef.current = {};
+
+    // 2. 페이드아웃 진행 중이던 GC 대기열 노드들도 강제 즉각 정지 및 소멸
+    fadingNodesRef.current.forEach(node => {
+      try {
+        node.source.stop();
+        node.source.disconnect();
+      } catch (e) {}
+      try {
+        node.gain.disconnect();
+      } catch (e) {}
+    });
+    fadingNodesRef.current = [];
+
     activeVersionIdsRef.current = [];
   }, [stopSync]);
 
@@ -254,24 +272,38 @@ export function AudioEngine({ trackVersions = [] }: { trackVersions: TrackVersio
       maxDuration = targetDuration;
     }
 
-    // 2. 0ms 크로스페이드를 위한 기존 활성 소스 페이드아웃 및 소멸 처리
+    // 2. 0ms 크로스페이드를 위한 기존 활성 소스 페이드아웃 및 GC 대기열 이관 처리
     const now = ctx.currentTime;
-    const fadeDuration = 0.03; // 30ms 페이드로 틱 노이즈 100% 방지
+    const fadeDuration = 0.015; // 15ms 페이드로 틱 노이즈 방지와 0ms 느낌 극대화
 
     Object.keys(sourcesRef.current).forEach(id => {
       const oldSource = sourcesRef.current[id];
       const oldGain = gainsRef.current[id];
       if (oldSource && oldGain && id !== targetVersionId) {
+        // 기존 램프 취소 후 즉각 페이드아웃 개시
         oldGain.gain.cancelScheduledValues(now);
         oldGain.gain.setValueAtTime(oldGain.gain.value, now);
         oldGain.gain.linearRampToValueAtTime(0.0, now + fadeDuration);
         oldSource.stop(now + fadeDuration);
         
-        // 30ms 페이드아웃 완료 직후 완벽한 소멸 정리
+        // GC 대기열 이식
+        const nodeToTrash = { id, source: oldSource, gain: oldGain };
+        fadingNodesRef.current.push(nodeToTrash);
+
+        // 30ms 페이드아웃 완료 직후 완벽한 소멸 정리 및 대기열 배출
         setTimeout(() => {
           try { oldSource.disconnect(); } catch (e) {}
           try { oldGain.disconnect(); } catch (e) {}
+          fadingNodesRef.current = fadingNodesRef.current.filter(n => n.source !== oldSource);
         }, fadeDuration * 1000 + 50);
+      }
+    });
+
+    // 30ms 페이드아웃 중인 녀석들은 sourcesRef 및 gainsRef에서 즉시 삭제하여 중복 볼륨 반전 방지
+    Object.keys(sourcesRef.current).forEach(id => {
+      if (id !== targetVersionId) {
+        delete sourcesRef.current[id];
+        delete gainsRef.current[id];
       }
     });
 
