@@ -210,6 +210,38 @@ export async function POST(request: NextRequest) {
         }));
         await executeActionBatch(verUpdates);
         break;
+      case "verifyAdminPin":
+        // 1. 테이블 자동 생성 및 기본값 111111 세팅
+        await executeActionQuery(`
+          CREATE TABLE IF NOT EXISTS admin_config (
+            key TEXT PRIMARY KEY,
+            value TEXT
+          )
+        `);
+        await executeActionQuery(`
+          INSERT OR IGNORE INTO admin_config (key, value) VALUES ('admin_pin', '111111')
+        `);
+
+        // 2. 검증 검사
+        const pinRes = await executeActionQuery("SELECT value FROM admin_config WHERE key = 'admin_pin'");
+        const systemPin = pinRes.results?.[0]?.value || '111111';
+        if (systemPin === payload.pin) {
+          return NextResponse.json({ success: true, verified: true });
+        } else {
+          return NextResponse.json({ success: true, verified: false });
+        }
+      case "updateAdminPin":
+        await executeActionQuery(`
+          CREATE TABLE IF NOT EXISTS admin_config (
+            key TEXT PRIMARY KEY,
+            value TEXT
+          )
+        `);
+        await executeActionQuery(
+          "INSERT OR REPLACE INTO admin_config (key, value) VALUES ('admin_pin', ?)",
+          [payload.pin]
+        );
+        break;
       default:
         return NextResponse.json({ error: "Unknown action" }, { status: 400 });
     }

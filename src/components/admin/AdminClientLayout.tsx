@@ -21,6 +21,7 @@ export function AdminClientLayout({ projects }: { projects: any[] }) {
   const [tempTitle, setTempTitle] = useState(project?.title || '');
   const [tempAlias, setTempAlias] = useState(project?.custom_alias || '');
   const [copied, setCopied] = useState(false);
+  const [tempAdminPin, setTempAdminPin] = useState('');
 
   useEffect(() => {
     if (project) {
@@ -442,6 +443,52 @@ export function AdminClientLayout({ projects }: { projects: any[] }) {
                 </div>
                 <p className="text-[10px] text-gray-500 leading-normal whitespace-pre-line">
                   {tempAlias ? `지정 시 두 주소로 모두 접근 가능합니다:\n/${project.short_id} 및 /${tempAlias}` : '별칭을 지정하여 자신만의 단축 URL을 설정하세요.'}
+                </p>
+              </div>
+
+              {/* 어드민 PIN 설정 (기본 111111) */}
+              <div className="space-y-2.5 p-4 border border-[#22272c]/60 rounded-lg bg-[#111416]/50">
+                <label className="text-xs font-bold text-gray-400 uppercase tracking-wider block">어드민 보안 PIN 변경 (6자리)</label>
+                <div className="flex gap-2">
+                  <input 
+                    type="text" 
+                    maxLength={6}
+                    value={tempAdminPin}
+                    onChange={(e) => setTempAdminPin(e.target.value.replace(/[^0-9]/g, ''))}
+                    className="flex-1 bg-[#111416] border border-[#22272c] rounded px-3 py-2 text-sm text-white focus:outline-none focus:border-[#f5a623] transition-colors"
+                    placeholder="새 6자리 PIN 입력"
+                  />
+                  <button 
+                    onClick={async () => {
+                      if (tempAdminPin.length !== 6 || !/^\d{6}$/.test(tempAdminPin)) {
+                        alert("PIN 번호는 숫자 6자리여야 합니다.");
+                        return;
+                      }
+                      
+                      const res = await fetch('/api/actions', {
+                        method: 'POST',
+                        headers: { 'Content-Type': 'application/json' },
+                        body: JSON.stringify({ 
+                          action: 'updateAdminPin', 
+                          payload: { pin: tempAdminPin } 
+                        })
+                      });
+                      
+                      if (res.ok) {
+                        alert("어드민 보안 PIN 번호가 성공적으로 변경되었습니다.");
+                        sessionStorage.setItem('admin_verified', 'true');
+                        setTempAdminPin('');
+                      } else {
+                        alert("PIN 번호 변경 실패");
+                      }
+                    }}
+                    className="bg-[#f5a623] hover:bg-[#f5a623]/80 text-black text-xs font-extrabold px-3.5 py-2 rounded transition-colors shrink-0 shadow-lg shadow-[#f5a623]/10"
+                  >
+                    PIN 변경
+                  </button>
+                </div>
+                <p className="text-[10px] text-gray-500 leading-normal">
+                  관리자 화면 진입 시 입력할 6자리 숫자 PIN 코드를 변경합니다. 기본값은 111111입니다.
                 </p>
               </div>
               {/* Category Reordering */}
