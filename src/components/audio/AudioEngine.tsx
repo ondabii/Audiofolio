@@ -33,8 +33,8 @@ export function AudioEngine({ trackVersions = [] }: { trackVersions: TrackVersio
 
   const audioCtxRef = useRef<AudioContext | null>(null);
   
-  // AudioBuffer 외에도 시작/끝 무음 트리밍 지점 캐싱
-  const buffersRef = useRef<Record<string, { buffer: AudioBuffer; loopStart: number; loopEnd: number }>>({});
+  // AudioBuffer 외에도 시작/끝 무음 트리밍 지점 및 볼륨 피크 캐싱
+  const buffersRef = useRef<Record<string, { buffer: AudioBuffer; loopStart: number; loopEnd: number; maxPeak: number }>>({});
   
   // 현재 동시 가동 중인 오디오 노드 레프
   const sourcesRef = useRef<Record<string, AudioBufferSourceNode>>({});
@@ -150,7 +150,7 @@ export function AudioEngine({ trackVersions = [] }: { trackVersions: TrackVersio
   }, [stopAllSources]);
 
   // ─── 오디오 바이너리 fetch 및 AudioBuffer 디코딩 캐시 ───
-  const loadAudioBuffer = useCallback(async (version: TrackVersion): Promise<{ buffer: AudioBuffer; loopStart: number; loopEnd: number }> => {
+  const loadAudioBuffer = useCallback(async (version: TrackVersion): Promise<{ buffer: AudioBuffer; loopStart: number; loopEnd: number; maxPeak: number }> => {
     const id = version.id;
     if (buffersRef.current[id]) {
       return buffersRef.current[id];
@@ -159,7 +159,7 @@ export function AudioEngine({ trackVersions = [] }: { trackVersions: TrackVersio
     updateVersionState(id, { isReady: false });
     const url = `/api/audio-url?key=${encodeURIComponent(version.audio_url)}`;
     const res = await fetch(url);
-    if (!res.ok) throw new Error(`HTTP 에러: ${res.status}`);
+    if (!res.ok) throw new Error(`HTTP error: ${res.status}`);
 
     const arrayBuffer = await res.arrayBuffer();
     const ctx = getAudioContext();
@@ -203,10 +203,21 @@ export function AudioEngine({ trackVersions = [] }: { trackVersions: TrackVersio
     const loopStart = startIndex / sampleRate;
     const loopEnd = (endIndex + 1) / sampleRate;
     
+    // 🔍 최대 피크 진폭 스캔 (노멀라이즈 볼륨 연산용)
+    let maxPeak = 0.0001; // 0 나누기 방지
+    for (let c = 0; c < audioBuffer.numberOfChannels; c++) {
+      const channel = audioBuffer.getChannelData(c);
+      for (let i = 0; i < channel.length; i++) {
+        const val = Math.abs(channel[i]);
+        if (val > maxPeak) maxPeak = val;
+      }
+    }
+    
     const cached = {
       buffer: audioBuffer,
       loopStart,
-      loopEnd
+      loopEnd,
+      maxPeak
     };
     
     buffersRef.current[id] = cached;
@@ -321,9 +332,12 @@ export function AudioEngine({ trackVersions = [] }: { trackVersions: TrackVersio
 
     const targetGain = ctx.createGain();
     
-    // 볼륨 페이드인 기동
+    // 볼륨 페이드인 기동 (노멀라이즈 적용 여부 확인 및 게인 보정값 연산)
+    const isNormalized = useAudioStore.getState().normalizedTrackIds[targetVersion.track_id] || false;
+    const targetPeakVolume = isNormalized ? (1.0 / cachedTarget.maxPeak) : 1.0;
+
     targetGain.gain.setValueAtTime(0.0, now);
-    targetGain.gain.linearRampToValueAtTime(1.0, now + fadeDuration);
+    targetGain.gain.linearRampToValueAtTime(targetPeakVolume, now + fadeDuration);
 
     targetSource.connect(targetGain);
     targetGain.connect(getMasterGain());
@@ -421,6 +435,31 @@ export function AudioEngine({ trackVersions = [] }: { trackVersions: TrackVersio
       masterGainRef.current.gain.value = volume;
     }
   }, [volume]);
+
+  // ─── 실시간 노멀라이즈 토글 감지 및 램프 반영 ───
+  const normalizedTrackIds = useAudioStore(state => state.normalizedTrackIds);
+  useEffect(() => {
+    if (!playingVersionId) return;
+    const targetVersion = trackVersions.find(v => v.id === playingVersionId);
+    if (!targetVersion) return;
+
+    const isNormalized = normalizedTrackIds[targetVersion.track_id] || false;
+    const cached = buffersRef.current[playingVersionId];
+    if (!cached) return;
+
+    const ctx = audioCtxRef.current;
+    if (!ctx) return;
+
+    const gainNode = gainsRef.current[playingVersionId];
+    if (gainNode) {
+      const now = ctx.currentTime;
+      const targetVol = isNormalized ? (1.0 / cached.maxPeak) : 1.0;
+      gainNode.gain.cancelScheduledValues(now);
+      gainNode.gain.setValueAtTime(gainNode.gain.value, now);
+      // 15ms 미세 볼륨 램프로 실시간 부드러운 스케일링 보정
+      gainNode.gain.linearRampToValueAtTime(targetVol, now + 0.015);
+    }
+  }, [normalizedTrackIds, playingVersionId, trackVersions]);
 
   return null;
 }

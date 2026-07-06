@@ -1,6 +1,6 @@
 'use client';
 
-import { Play, Pause, Headphones, Loader } from 'lucide-react';
+import { Play, Pause, Headphones, Loader, Sparkles } from 'lucide-react';
 import { useAudioStore } from '@/store/audioStore';
 import { useProjectStore } from '@/store/projectStore';
 import { InlineEditor } from '@/components/admin/InlineEditor';
@@ -11,6 +11,10 @@ export function TrackItem({ track, readOnly = false }: { track: any; readOnly?: 
   const versionStates = useAudioStore(state => state.versionStates);
   const setPlayingVersionId = useAudioStore(state => state.setPlayingVersionId);
   const setIsPlaying = useAudioStore(state => state.setIsPlaying);
+  const normalizedTrackIds = useAudioStore(state => state.normalizedTrackIds);
+  const toggleNormalize = useAudioStore(state => state.toggleNormalize);
+
+  const isNormalized = normalizedTrackIds[track.id] || false;
 
   const versions: any[] = track.versions ?? [];
 
@@ -77,15 +81,30 @@ export function TrackItem({ track, readOnly = false }: { track: any; readOnly?: 
 
   return (
     <div id={`track-${track.id}`} className="mb-16 pt-4">
-      {/* 트랙 제목 */}
-      <h3 className="text-lg font-bold text-white mb-4 flex items-center">
-        <InlineEditor
-          initialValue={track.title}
-          onSave={handleUpdateTrack}
-          textClassName="text-lg font-bold text-white truncate"
-          readOnly={readOnly}
-        />
-      </h3>
+      {/* 트랙 제목 및 노멀라이즈 토글 */}
+      <div className="flex items-center justify-between mb-4">
+        <h3 className="text-lg font-bold text-white flex items-center">
+          <InlineEditor
+            initialValue={track.title}
+            onSave={handleUpdateTrack}
+            textClassName="text-lg font-bold text-white truncate"
+            readOnly={readOnly}
+          />
+        </h3>
+        
+        <button
+          onClick={() => toggleNormalize(track.id)}
+          className={`flex items-center gap-1.5 px-2.5 py-1 rounded text-[10px] font-extrabold border transition-all ${
+            isNormalized
+              ? 'bg-[#f5a623]/10 text-[#f5a623] border-[#f5a623]/30 shadow-lg shadow-[#f5a623]/5'
+              : 'bg-black/30 text-gray-500 border-gray-800 hover:text-gray-300'
+          }`}
+          title="음량 피크 평준화(Peak Normalization)"
+        >
+          <Sparkles className="w-3 h-3" />
+          노멀라이즈 {isNormalized ? 'ON' : 'OFF'}
+        </button>
+      </div>
 
       {/* 버전 목록 */}
       <div className="flex flex-col">
@@ -193,8 +212,10 @@ function VersionProgressBar({
   const isPlaying = useAudioStore(state => state.isPlaying);
   const setPlayingVersionId = useAudioStore(state => state.setPlayingVersionId);
   const setIsPlaying = useAudioStore(state => state.setIsPlaying);
+  const normalizedTrackIds = useAudioStore(state => state.normalizedTrackIds);
  
   const isCurrent = playingVersionId === version.id;
+  const isNormalized = normalizedTrackIds[version.track_id] || false;
  
   // 스펙트럼 너비 비율
   const spectrumWidthPercent =
@@ -287,36 +308,42 @@ function VersionProgressBar({
       {!isReady && <div className="absolute inset-0 bg-stripes animate-pulse z-0" />}
  
       {/* 파형 막대 시각화 */}
-      {waveformBars.length > 0 && (
-        <div className="absolute inset-0 flex items-center px-0 z-[1] pointer-events-none" style={{ gap: '1px' }}>
-          {waveformBars.map((val, i) => {
-            const isPassed = isPlayingTrack && ((i + 1) / waveformBars.length) * 100 <= progressPercent;
-            
-            let barColor = 'rgba(255, 255, 255, 0.12)'; // 기본 회색 (로드 안 됨 혹은 아직 안 지나간 구간)
-            
-            if (isReady) {
-              if (isPassed) {
-                if (isCurrent && isPlayingTrack) {
-                  barColor = 'rgba(245, 166, 35, 0.9)'; // 재생 중인 버전 (노란색)
-                } else {
-                  barColor = 'rgba(255, 255, 255, 0.85)'; // 재생 중이지 않은 버전 (하얀색)
+      {waveformBars.length > 0 && (() => {
+        const maxVal = Math.max(...waveformBars, 1);
+        return (
+          <div className="absolute inset-0 flex items-center px-0 z-[1] pointer-events-none" style={{ gap: '1px' }}>
+            {waveformBars.map((val, i) => {
+              const isPassed = isPlayingTrack && ((i + 1) / waveformBars.length) * 100 <= progressPercent;
+              
+              let barColor = 'rgba(255, 255, 255, 0.12)'; // 기본 회색 (로드 안 됨 혹은 아직 안 지나간 구간)
+              
+              if (isReady) {
+                if (isPassed) {
+                  if (isCurrent && isPlayingTrack) {
+                    barColor = 'rgba(245, 166, 35, 0.9)'; // 재생 중인 버전 (노란색)
+                  } else {
+                    barColor = 'rgba(255, 255, 255, 0.85)'; // 재생 중이지 않은 버전 (하얀색)
+                  }
                 }
               }
-            }
 
-            return (
-              <div
-                key={i}
-                className="flex-1 rounded-full origin-bottom"
-                style={{
-                  height: `${Math.max(8, (val / 100) * 85)}%`,
-                  backgroundColor: barColor,
-                }}
-              />
-            );
-          })}
-        </div>
-      )}
+              // 💡 노멀라이즈 활성 시 피크값 기준 100% 한계치까지 비례 증폭 렌더링
+              const displayVal = isNormalized ? val * (100 / maxVal) : val;
+
+              return (
+                <div
+                  key={i}
+                  className="flex-1 rounded-full origin-bottom"
+                  style={{
+                    height: `${Math.max(8, (displayVal / 100) * 85)}%`,
+                    backgroundColor: barColor,
+                  }}
+                />
+              );
+            })}
+          </div>
+        );
+      })()}
  
       {/* 포맷/비트레이트 뱃지: Audio/ 프리픽스 제거 및 비대표 버전도 비트레이트 모두 노출 */}
       <div className="absolute right-1 bottom-1 flex gap-1 z-10">
