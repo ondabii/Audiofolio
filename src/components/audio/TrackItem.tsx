@@ -1,5 +1,6 @@
 'use client';
 
+import { useEffect } from 'react';
 import { Play, Pause, Headphones, Loader, Sparkles } from 'lucide-react';
 import { useAudioStore } from '@/store/audioStore';
 import { useProjectStore } from '@/store/projectStore';
@@ -15,6 +16,46 @@ export function TrackItem({ track, readOnly = false }: { track: any; readOnly?: 
   const toggleNormalize = useAudioStore(state => state.toggleNormalize);
 
   const isNormalized = normalizedTrackIds[track.id] || false;
+
+  // DB에 적재된 트랙 노멀라이즈 설정을 최초/변경 마운트 시점에 스토어 상태로 역동기화
+  useEffect(() => {
+    if (track && track.is_normalized !== undefined) {
+      const dbNormalize = track.is_normalized === 1 || track.is_normalized === true;
+      if (isNormalized !== dbNormalize) {
+        useAudioStore.setState((prev) => ({
+          normalizedTrackIds: {
+            ...prev.normalizedTrackIds,
+            [track.id]: dbNormalize
+          }
+        }));
+      }
+    }
+  }, [track, track.is_normalized, track.id]);
+
+  const handleNormalizeToggle = async () => {
+    const nextVal = !isNormalized;
+    toggleNormalize(track.id);
+
+    // D1 DB 동기화
+    await fetch('/api/actions', {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({
+        action: 'updateTrackNormalize',
+        payload: { id: track.id, is_normalized: nextVal }
+      })
+    });
+
+    // projectStore 상태도 실시간 반영
+    const currentProject = useProjectStore.getState().project;
+    if (currentProject) {
+      const updatedCats = currentProject.categories.map(cat => ({
+        ...cat,
+        tracks: cat.tracks.map(t => t.id === track.id ? { ...t, is_normalized: nextVal ? 1 : 0 } : t)
+      }));
+      useProjectStore.getState().setProject({ ...currentProject, categories: updatedCats });
+    }
+  };
 
   const versions: any[] = track.versions ?? [];
 
@@ -92,18 +133,20 @@ export function TrackItem({ track, readOnly = false }: { track: any; readOnly?: 
           />
         </h3>
         
-        <button
-          onClick={() => toggleNormalize(track.id)}
-          className={`flex items-center gap-1.5 px-2.5 py-1 rounded text-[10px] font-extrabold border transition-all ${
-            isNormalized
-              ? 'bg-[#f5a623]/10 text-[#f5a623] border-[#f5a623]/30 shadow-lg shadow-[#f5a623]/5'
-              : 'bg-black/30 text-gray-500 border-gray-800 hover:text-gray-300'
-          }`}
-          title="음량 피크 평준화(Peak Normalization)"
-        >
-          <Sparkles className="w-3 h-3" />
-          노멀라이즈 {isNormalized ? 'ON' : 'OFF'}
-        </button>
+        {!readOnly && (
+          <button
+            onClick={handleNormalizeToggle}
+            className={`flex items-center gap-1.5 px-2.5 py-1 rounded text-[10px] font-extrabold border transition-all ${
+              isNormalized
+                ? 'bg-[#f5a623]/10 text-[#f5a623] border-[#f5a623]/30 shadow-lg shadow-[#f5a623]/5'
+                : 'bg-black/30 text-gray-500 border-gray-800 hover:text-gray-300'
+            }`}
+            title="음량 피크 평준화(Peak Normalization)"
+          >
+            <Sparkles className="w-3 h-3" />
+            노멀라이즈 {isNormalized ? 'ON' : 'OFF'}
+          </button>
+        )}
       </div>
 
       {/* 버전 목록 */}

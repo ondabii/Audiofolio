@@ -72,6 +72,11 @@ export async function POST(request: NextRequest) {
     const body = await request.json() as any;
     const { action, payload } = body;
 
+    // tracks 테이블에 is_normalized 컬럼 자동 생성 마이그레이션
+    try {
+      await executeActionQuery("ALTER TABLE tracks ADD COLUMN is_normalized INTEGER DEFAULT 0");
+    } catch (e) {}
+
     switch (action) {
       case "createProject":
         await executeActionQuery(
@@ -240,6 +245,12 @@ export async function POST(request: NextRequest) {
         await executeActionQuery(
           "INSERT OR REPLACE INTO admin_config (key, value) VALUES ('admin_pin', ?)",
           [payload.pin]
+        );
+        break;
+      case "updateTrackNormalize":
+        await executeActionQuery(
+          "UPDATE tracks SET is_normalized = ? WHERE id = ?",
+          [payload.is_normalized ? 1 : 0, payload.id]
         );
         break;
       default:

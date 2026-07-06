@@ -13,6 +13,7 @@ export default function AdminPinGate({ children }: AdminPinGateProps) {
   const [error, setError] = useState<boolean>(false);
   const [checkingSession, setCheckingSession] = useState<boolean>(true);
   const containerRef = useRef<HTMLDivElement>(null);
+  const inputRef = useRef<HTMLInputElement>(null);
 
   // 1. 세션 스토리지에서 기존 인증 여부 검사
   useEffect(() => {
@@ -94,28 +95,10 @@ export default function AdminPinGate({ children }: AdminPinGateProps) {
     }
   };
 
-  const handleKeypadClick = (num: string) => {
-    if (loading || pin.length >= 6) return;
-    setError(false);
-    setPin(prev => prev + num);
-  };
-
-  const handleBackspace = () => {
-    if (loading) return;
-    setError(false);
-    setPin(prev => prev.slice(0, -1));
-  };
-
-  const handleClear = () => {
-    if (loading) return;
-    setError(false);
-    setPin('');
-  };
-
   if (checkingSession) {
     return (
       <div className="min-h-screen bg-[#111416] flex items-center justify-center">
-        <div className="w-8 h-8 border-4 border-primary border-t-transparent rounded-full animate-spin"></div>
+        <div className="w-8 h-8 border-4 border-[#f5a623] border-t-transparent rounded-full animate-spin"></div>
       </div>
     );
   }
@@ -141,10 +124,31 @@ export default function AdminPinGate({ children }: AdminPinGateProps) {
         }
       `}</style>
 
+      {/* 전체 카드 영역을 클릭하면 보이지 않는 input에 강제 포커싱 */}
       <div 
         ref={containerRef}
-        className="w-full max-w-sm bg-[#161a1d] border border-[#22272c] rounded-2xl p-8 shadow-2xl flex flex-col items-center relative z-10 transition-all duration-300"
+        onClick={() => inputRef.current?.focus()}
+        className="w-full max-w-sm bg-[#161a1d] border border-[#22272c] rounded-2xl p-8 shadow-2xl flex flex-col items-center relative z-10 transition-all duration-300 cursor-text"
       >
+        {/* 모바일/데스크톱 입력을 우회 수신하기 위한 숨겨진 실제 input */}
+        <input
+          ref={inputRef}
+          type="text"
+          pattern="[0-9]*"
+          inputMode="numeric"
+          maxLength={6}
+          value={pin}
+          onChange={(e) => {
+            setError(false);
+            const val = e.target.value.replace(/[^0-9]/g, '');
+            if (val.length <= 6) {
+              setPin(val);
+            }
+          }}
+          className="absolute inset-0 w-full h-full opacity-0 cursor-text z-30"
+          autoFocus
+        />
+
         {/* 자물쇠 로고 아이콘 */}
         <div className={`w-14 h-14 rounded-full flex items-center justify-center mb-6 transition-all duration-300 ${
           error ? 'bg-red-500/10 text-red-500 border border-red-500/30' : 'bg-[#f5a623]/10 text-[#f5a623] border border-[#f5a623]/20'
@@ -160,7 +164,7 @@ export default function AdminPinGate({ children }: AdminPinGateProps) {
         </p>
 
         {/* 6개 슬롯 도트 인디케이터 */}
-        <div className="flex gap-3 mb-10">
+        <div className="flex gap-3 mb-4">
           {[...Array(6)].map((_, i) => {
             const hasValue = pin.length > i;
             return (
@@ -184,38 +188,9 @@ export default function AdminPinGate({ children }: AdminPinGateProps) {
           })}
         </div>
 
-        {/* 숫자 키패드 그리드 */}
-        <div className="grid grid-cols-3 gap-3 w-full mb-4">
-          {['1', '2', '3', '4', '5', '6', '7', '8', '9'].map(num => (
-            <button
-              key={num}
-              onClick={() => handleKeypadClick(num)}
-              className="bg-[#111416] hover:bg-[#111416]/80 text-white font-bold py-4 rounded-xl border border-[#22272c]/40 hover:border-[#f5a623]/20 transition-all active:scale-95 text-lg"
-            >
-              {num}
-            </button>
-          ))}
-          <button
-            onClick={handleClear}
-            className="text-xs font-bold text-gray-500 hover:text-white transition-colors"
-          >
-            초기화
-          </button>
-          <button
-            onClick={() => handleKeypadClick('0')}
-            className="bg-[#111416] hover:bg-[#111416]/80 text-white font-bold py-4 rounded-xl border border-[#22272c]/40 hover:border-[#f5a623]/20 transition-all active:scale-95 text-lg"
-          >
-            0
-          </button>
-          <button
-            onClick={handleBackspace}
-            className="flex items-center justify-center text-gray-500 hover:text-white transition-colors"
-          >
-            <svg className="w-5 h-5" fill="none" stroke="currentColor" viewBox="0 0 24 24">
-              <path strokeLinecap="round" strokeLinejoin="round" strokeWidth="2" d="M12 14l2-2m0 0l2-2m-2 2l-2-2m2 2l2 2M3 12l6.414 6.414a2 2 0 001.414.586H19a2 2 0 002-2V7a2 2 0 00-2-2h-8.172a2 2 0 00-1.414.586L3 12z" />
-            </svg>
-          </button>
-        </div>
+        <span className="text-[10px] text-gray-500 font-bold mt-4 tracking-wider uppercase">
+          {loading ? '검증 중...' : '키보드로 숫자를 입력하세요'}
+        </span>
 
         {loading && (
           <div className="absolute inset-0 bg-[#161a1d]/80 rounded-2xl flex items-center justify-center z-20">
