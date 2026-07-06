@@ -279,32 +279,37 @@ export function AudioEngine({ trackVersions = [] }: { trackVersions: TrackVersio
     Object.keys(sourcesRef.current).forEach(id => {
       const oldSource = sourcesRef.current[id];
       const oldGain = gainsRef.current[id];
-      if (oldSource && oldGain && id !== targetVersionId) {
-        // 기존 램프 취소 후 즉각 페이드아웃 개시
-        oldGain.gain.cancelScheduledValues(now);
-        oldGain.gain.setValueAtTime(oldGain.gain.value, now);
-        oldGain.gain.linearRampToValueAtTime(0.0, now + fadeDuration);
-        oldSource.stop(now + fadeDuration);
-        
-        // GC 대기열 이식
-        const nodeToTrash = { id, source: oldSource, gain: oldGain };
-        fadingNodesRef.current.push(nodeToTrash);
-
-        // 30ms 페이드아웃 완료 직후 완벽한 소멸 정리 및 대기열 배출
-        setTimeout(() => {
+      if (oldSource && oldGain) {
+        if (id === targetVersionId) {
+          // 동일 버전을 탐색(Seek)하거나 재시작하는 경우 딜레이 없이 즉각 정지 및 물리적 차단!
+          try { oldSource.stop(); } catch (e) {}
           try { oldSource.disconnect(); } catch (e) {}
           try { oldGain.disconnect(); } catch (e) {}
-          fadingNodesRef.current = fadingNodesRef.current.filter(n => n.source !== oldSource);
-        }, fadeDuration * 1000 + 50);
+        } else {
+          // 다른 버전으로 스왑하는 경우는 15ms 부드러운 크로스페이드 처리
+          oldGain.gain.cancelScheduledValues(now);
+          oldGain.gain.setValueAtTime(oldGain.gain.value, now);
+          oldGain.gain.linearRampToValueAtTime(0.0, now + fadeDuration);
+          oldSource.stop(now + fadeDuration);
+          
+          // GC 대기열 이식
+          const nodeToTrash = { id, source: oldSource, gain: oldGain };
+          fadingNodesRef.current.push(nodeToTrash);
+
+          // 페이드아웃 완료 직후 완벽한 소멸 정리 및 대기열 배출
+          setTimeout(() => {
+            try { oldSource.disconnect(); } catch (e) {}
+            try { oldGain.disconnect(); } catch (e) {}
+            fadingNodesRef.current = fadingNodesRef.current.filter(n => n.source !== oldSource);
+          }, fadeDuration * 1000 + 50);
+        }
       }
     });
 
-    // 30ms 페이드아웃 중인 녀석들은 sourcesRef 및 gainsRef에서 즉시 삭제하여 중복 볼륨 반전 방지
+    // sourcesRef 및 gainsRef 맵에서 즉각 클린업하여 다음 재생 등록 준비
     Object.keys(sourcesRef.current).forEach(id => {
-      if (id !== targetVersionId) {
-        delete sourcesRef.current[id];
-        delete gainsRef.current[id];
-      }
+      delete sourcesRef.current[id];
+      delete gainsRef.current[id];
     });
 
     // 3. 신규 활성 음원 재생 기동 (오직 1개의 음원만 믹싱 스레드에서 돌아가도록 고안됨)
