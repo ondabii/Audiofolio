@@ -1,7 +1,7 @@
 'use client';
 
 import { useEffect } from 'react';
-import { Play, Pause, Headphones, Loader, Sparkles } from 'lucide-react';
+import { Play, Pause, Headphones, Loader, Sparkles, Download } from 'lucide-react';
 import { useAudioStore } from '@/store/audioStore';
 import { useProjectStore } from '@/store/projectStore';
 import { InlineEditor } from '@/components/admin/InlineEditor';
@@ -14,6 +14,29 @@ export function TrackItem({ track, readOnly = false }: { track: any; readOnly?: 
   const setIsPlaying = useAudioStore(state => state.setIsPlaying);
 
   const versions: any[] = track.versions ?? [];
+  const isDownloadable = track.is_downloadable === 1 || track.is_downloadable === true;
+
+  const handleDownloadVersion = async (v: any) => {
+    try {
+      const url = `/api/audio-url?key=${encodeURIComponent(v.audio_url)}`;
+      const response = await fetch(url);
+      if (!response.ok) throw new Error("다운로드 실패");
+      
+      const blob = await response.blob();
+      const downloadUrl = window.URL.createObjectURL(blob);
+      const a = document.createElement('a');
+      a.href = downloadUrl;
+      const ext = v.audio_url.split('.').pop() || 'ogg';
+      a.download = `${track.title} - ${v.title || 'Version'}.${ext}`;
+      document.body.appendChild(a);
+      a.click();
+      a.remove();
+      window.URL.revokeObjectURL(downloadUrl);
+    } catch (e) {
+      console.error(e);
+      alert("파일 다운로드 중 에러가 발생했습니다.");
+    }
+  };
 
   // ─── 대표 버전 동적 결정 알고리즘 ───
   // 1. 수동 지정된 대표 버전 검사
@@ -142,6 +165,8 @@ export function TrackItem({ track, readOnly = false }: { track: any; readOnly?: 
                   versionDuration={versionDuration}
                   isReady={isReady}
                   isRep={isRep}
+                  isDownloadable={isDownloadable}
+                  onDownload={handleDownloadVersion}
                 />
               </div>
             </div>
@@ -181,6 +206,8 @@ function VersionProgressBar({
   versionDuration,
   isReady,
   isRep,
+  isDownloadable,
+  onDownload,
 }: {
   version: any;
   maxDuration: number;
@@ -188,6 +215,8 @@ function VersionProgressBar({
   versionDuration: number;
   isReady: boolean;
   isRep: boolean;
+  isDownloadable: boolean;
+  onDownload: (v: any) => void;
 }) {
   const rawCurrentTime = useAudioStore(state => state.rawCurrentTime);
   const playingVersionId = useAudioStore(state => state.playingVersionId);
@@ -343,6 +372,20 @@ function VersionProgressBar({
         );
       })()}
  
+      {/* 다운로드 버튼: 노멀라이즈 없이 원본 저장. 캡슐 태그 바로 위(bottom-8)에 배치 */}
+      {isDownloadable && (
+        <button
+          onClick={(e) => {
+            e.stopPropagation();
+            onDownload(version);
+          }}
+          className="absolute right-1 bottom-8.5 z-20 p-1.5 bg-[#161a1d]/90 hover:bg-black border border-gray-800 hover:border-gray-600 text-gray-400 hover:text-white rounded-md transition-all active:scale-95 shadow-md flex items-center justify-center cursor-pointer"
+          title="원본 오디오 다운로드 (Normalize 미적용)"
+        >
+          <Download className="w-3 h-3" />
+        </button>
+      )}
+
       {/* 포맷/비트레이트/노멀라이즈 뱃지: Audio/ 프리픽스 제거 및 비대표 버전도 비트레이트 모두 노출 */}
       <div className="absolute right-1 bottom-1 flex gap-1.5 z-10 items-center">
         <span

@@ -77,6 +77,9 @@ export async function POST(request: NextRequest) {
       await executeActionQuery("ALTER TABLE tracks ADD COLUMN is_normalized INTEGER DEFAULT 0");
     } catch (e) {}
     try {
+      await executeActionQuery("ALTER TABLE tracks ADD COLUMN is_downloadable INTEGER DEFAULT 0");
+    } catch (e) {}
+    try {
       await executeActionQuery("ALTER TABLE track_versions ADD COLUMN is_normalized INTEGER DEFAULT 0");
     } catch (e) {}
 
@@ -254,6 +257,12 @@ export async function POST(request: NextRequest) {
         await executeActionQuery(
           "UPDATE tracks SET is_normalized = ? WHERE id = ?",
           [payload.is_normalized ? 1 : 0, payload.id]
+        );
+        break;
+      case "updateTrackDownloadable":
+        await executeActionQuery(
+          "UPDATE tracks SET is_downloadable = ? WHERE id = ?",
+          [payload.is_downloadable ? 1 : 0, payload.id]
         );
         break;
       case "updateVersionNormalize":

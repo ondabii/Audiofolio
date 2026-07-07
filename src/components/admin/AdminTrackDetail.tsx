@@ -1,7 +1,7 @@
 'use client';
 
 import { useState, useRef, useEffect } from 'react';
-import { Star, Eye, EyeOff, UploadCloud, Trash2, Loader, Pencil, X, Sparkles } from 'lucide-react';
+import { Star, Eye, EyeOff, UploadCloud, Trash2, Loader, Pencil, X, Sparkles, Download } from 'lucide-react';
 import { useProjectStore } from '@/store/projectStore';
 import { useAudioStore } from '@/store/audioStore';
 import { InlineEditor } from '@/components/admin/InlineEditor';
@@ -20,6 +20,31 @@ export function AdminTrackDetail({ track, projectId }: AdminTrackDetailProps) {
 
   const normalizedVersionIds = useAudioStore(state => state.normalizedVersionIds);
   const toggleNormalize = useAudioStore(state => state.toggleNormalize);
+
+  const isDownloadable = track.is_downloadable === 1 || track.is_downloadable === true;
+  const handleDownloadableToggle = async () => {
+    const nextVal = !isDownloadable;
+    
+    // D1 DB 동기화
+    await fetch('/api/actions', {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({
+        action: 'updateTrackDownloadable',
+        payload: { id: track.id, is_downloadable: nextVal }
+      })
+    });
+
+    // projectStore 상태도 실시간 반영
+    const currentProject = useProjectStore.getState().project;
+    if (currentProject) {
+      const updatedCats = currentProject.categories.map(cat => ({
+        ...cat,
+        tracks: cat.tracks.map(t => t.id === track.id ? { ...t, is_downloadable: nextVal ? 1 : 0 } : t)
+      }));
+      useProjectStore.getState().setProject({ ...currentProject, categories: updatedCats });
+    }
+  };
 
   // DB의 버전 노멀라이즈 상태를 오디오 엔진 상태로 동기화
   useEffect(() => {
@@ -286,6 +311,18 @@ export function AdminTrackDetail({ track, projectId }: AdminTrackDetailProps) {
           </div>
         </div>
       <div className="flex gap-2 shrink-0">
+        <button
+          onClick={handleDownloadableToggle}
+          className={`flex items-center gap-1.5 px-3 py-1.5 rounded text-xs font-extrabold border transition-all ${
+            isDownloadable
+              ? 'bg-[#f5a623]/10 text-[#f5a623] border-[#f5a623]/30 shadow-lg shadow-[#f5a623]/5'
+              : 'bg-[#1c2126] text-gray-500 border-gray-800 hover:text-gray-300 hover:bg-[#252b31]'
+          }`}
+          title="공개 페이지 다운로드 허용 여부 토글"
+        >
+          <Download className="w-3.5 h-3.5" /> 다운로드 {isDownloadable ? '허용' : '차단'}
+        </button>
+
         <button 
           onClick={handleDeleteTrack} 
           className="text-red-500 hover:text-red-400 font-bold text-xs flex items-center gap-1.5 px-3 py-1.5 rounded bg-red-500/10 border border-red-500/20 hover:bg-red-500/20 transition-all"
