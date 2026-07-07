@@ -393,19 +393,9 @@ export function AudioEngine({ trackVersions = [] }: { trackVersions: TrackVersio
       setRawCurrentTime(0);
 
       // 💡 다른 트랙으로 스왑 시, 로딩 완료 시점까지 재생바가 혼자 앞서나가는 현상 방지!
-      // 다운로드 및 디코딩 완료 직전에만 재생 상태(isPlaying = true)로 전환하도록 제어
-      if (isPlaying) {
-        useAudioStore.getState().setIsPlaying(false);
-        (async () => {
-          try {
-            await startSinglePlay(playingVersionId, 0);
-            useAudioStore.getState().setIsPlaying(true);
-          } catch (e) {
-            console.error(e);
-          }
-        })();
-        return;
-      }
+      // 로컬 재생 타이머 루프를 즉각 멈춰 동기 대기 시킵니다.
+      stopAllSources();
+      isPlayingRef.current = false;
     }
 
     if (isPlaying) {
