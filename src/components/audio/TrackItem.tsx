@@ -320,7 +320,7 @@ function VersionProgressBar({
                   if (isCurrent && isPlayingTrack) {
                     barColor = 'rgba(245, 166, 35, 0.9)'; // 재생 중인 버전 (노란색)
                   } else {
-                    barColor = 'rgba(255, 255, 255, 0.85)'; // 재생 중이지 않은 버전 (하얀색)
+                    barColor = 'rgba(245, 166, 35, 0.38)'; // 재생 중이지 않은 버전 (어두운 주황색)
                   }
                 }
               }
@@ -343,8 +343,15 @@ function VersionProgressBar({
         );
       })()}
  
-      {/* 포맷/비트레이트 뱃지: Audio/ 프리픽스 제거 및 비대표 버전도 비트레이트 모두 노출 */}
-      <div className="absolute right-1 bottom-1 flex gap-1 z-10">
+      {/* 포맷/비트레이트/노멀라이즈 뱃지: Audio/ 프리픽스 제거 및 비대표 버전도 비트레이트 모두 노출 */}
+      <div className="absolute right-1 bottom-1 flex gap-1.5 z-10 items-center">
+        {isNormalized && (
+          <span
+            className="bg-black/50 text-gray-400 border-gray-700/50 text-[9px] font-bold px-1.5 py-0.5 rounded border backdrop-blur-sm uppercase"
+          >
+            Normalized
+          </span>
+        )}
         <span
           className="bg-black/50 text-gray-400 border-gray-700/50 text-[9px] font-bold px-1.5 py-0.5 rounded border backdrop-blur-sm uppercase"
         >
