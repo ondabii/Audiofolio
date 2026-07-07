@@ -1,8 +1,9 @@
 'use client';
 
 import { useState, useRef } from 'react';
-import { Star, Eye, EyeOff, UploadCloud, Trash2, Loader, Pencil, X } from 'lucide-react';
+import { Star, Eye, EyeOff, UploadCloud, Trash2, Loader, Pencil, X, Sparkles } from 'lucide-react';
 import { useProjectStore } from '@/store/projectStore';
+import { useAudioStore } from '@/store/audioStore';
 import { InlineEditor } from '@/components/admin/InlineEditor';
 import { extractAudioMetadata } from '@/lib/audioUtils';
 
@@ -16,6 +17,35 @@ export function AdminTrackDetail({ track, projectId }: AdminTrackDetailProps) {
   const [uploadProgress, setUploadProgress] = useState(0);
   const [uploadText, setUploadText] = useState('');
   const fileInputRef = useRef<HTMLInputElement>(null);
+
+  const normalizedTrackIds = useAudioStore(state => state.normalizedTrackIds);
+  const toggleNormalize = useAudioStore(state => state.toggleNormalize);
+  const isNormalized = normalizedTrackIds[track.id] || false;
+
+  const handleNormalizeToggle = async () => {
+    const nextVal = !isNormalized;
+    toggleNormalize(track.id);
+
+    // D1 DB 동기화
+    await fetch('/api/actions', {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({
+        action: 'updateTrackNormalize',
+        payload: { id: track.id, is_normalized: nextVal }
+      })
+    });
+
+    // projectStore 상태도 실시간 반영
+    const currentProject = useProjectStore.getState().project;
+    if (currentProject) {
+      const updatedCats = currentProject.categories.map(cat => ({
+        ...cat,
+        tracks: cat.tracks.map(t => t.id === track.id ? { ...t, is_normalized: nextVal ? 1 : 0 } : t)
+      }));
+      useProjectStore.getState().setProject({ ...currentProject, categories: updatedCats });
+    }
+  };
 
   const project = useProjectStore(state => state.project);
   const categories = project?.categories || [];
@@ -234,14 +264,28 @@ export function AdminTrackDetail({ track, projectId }: AdminTrackDetailProps) {
             </select>
           </div>
         </div>
+      <div className="flex gap-2 shrink-0">
+        <button
+          onClick={handleNormalizeToggle}
+          className={`flex items-center gap-1.5 px-3 py-1.5 rounded text-xs font-extrabold border transition-all ${
+            isNormalized
+              ? 'bg-[#f5a623]/10 text-[#f5a623] border-[#f5a623]/30 shadow-lg shadow-[#f5a623]/5'
+              : 'bg-[#1c2126] text-gray-500 border-gray-800 hover:text-gray-300 hover:bg-[#252b31]'
+          }`}
+          title="음량 피크 평준화(Peak Normalization)"
+        >
+          <Sparkles className="w-3.5 h-3.5" /> 음량 노멀라이즈 {isNormalized ? 'ON' : 'OFF'}
+        </button>
+
         <button 
           onClick={handleDeleteTrack} 
-          className="text-red-500 hover:text-red-400 font-bold text-xs flex items-center gap-1.5 px-3 py-1.5 rounded bg-red-500/10 border border-red-500/20 hover:bg-red-500/20 transition-all shrink-0"
+          className="text-red-500 hover:text-red-400 font-bold text-xs flex items-center gap-1.5 px-3 py-1.5 rounded bg-red-500/10 border border-red-500/20 hover:bg-red-500/20 transition-all"
           title="트랙 삭제"
         >
           <Trash2 className="w-3.5 h-3.5" /> 트랙 삭제
         </button>
       </div>
+    </div>
 
       {/* Version List & Dropzone Container */}
       <div className="flex-1 overflow-y-auto p-6 scrollbar-hide flex flex-col min-w-0">
