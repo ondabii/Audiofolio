@@ -12,50 +12,6 @@ export function TrackItem({ track, readOnly = false }: { track: any; readOnly?: 
   const versionStates = useAudioStore(state => state.versionStates);
   const setPlayingVersionId = useAudioStore(state => state.setPlayingVersionId);
   const setIsPlaying = useAudioStore(state => state.setIsPlaying);
-  const normalizedTrackIds = useAudioStore(state => state.normalizedTrackIds);
-  const toggleNormalize = useAudioStore(state => state.toggleNormalize);
-
-  const isNormalized = normalizedTrackIds[track.id] || false;
-
-  // DB에 적재된 트랙 노멀라이즈 설정을 최초/변경 마운트 시점에 스토어 상태로 역동기화
-  useEffect(() => {
-    if (track && track.is_normalized !== undefined) {
-      const dbNormalize = track.is_normalized === 1 || track.is_normalized === true;
-      if (isNormalized !== dbNormalize) {
-        useAudioStore.setState((prev) => ({
-          normalizedTrackIds: {
-            ...prev.normalizedTrackIds,
-            [track.id]: dbNormalize
-          }
-        }));
-      }
-    }
-  }, [track, track.is_normalized, track.id]);
-
-  const handleNormalizeToggle = async () => {
-    const nextVal = !isNormalized;
-    toggleNormalize(track.id);
-
-    // D1 DB 동기화
-    await fetch('/api/actions', {
-      method: 'POST',
-      headers: { 'Content-Type': 'application/json' },
-      body: JSON.stringify({
-        action: 'updateTrackNormalize',
-        payload: { id: track.id, is_normalized: nextVal }
-      })
-    });
-
-    // projectStore 상태도 실시간 반영
-    const currentProject = useProjectStore.getState().project;
-    if (currentProject) {
-      const updatedCats = currentProject.categories.map(cat => ({
-        ...cat,
-        tracks: cat.tracks.map(t => t.id === track.id ? { ...t, is_normalized: nextVal ? 1 : 0 } : t)
-      }));
-      useProjectStore.getState().setProject({ ...currentProject, categories: updatedCats });
-    }
-  };
 
   const versions: any[] = track.versions ?? [];
 
@@ -122,32 +78,15 @@ export function TrackItem({ track, readOnly = false }: { track: any; readOnly?: 
 
   return (
     <div id={`track-${track.id}`} className="mb-16 pt-4">
-      {/* 트랙 제목 및 노멀라이즈 토글 */}
-      <div className="flex items-center justify-between mb-4">
-        <h3 className="text-lg font-bold text-white flex items-center">
-          <InlineEditor
-            initialValue={track.title}
-            onSave={handleUpdateTrack}
-            textClassName="text-lg font-bold text-white truncate"
-            readOnly={readOnly}
-          />
-        </h3>
-        
-        {!readOnly && (
-          <button
-            onClick={handleNormalizeToggle}
-            className={`flex items-center gap-1.5 px-2.5 py-1 rounded text-[10px] font-extrabold border transition-all ${
-              isNormalized
-                ? 'bg-[#f5a623]/10 text-[#f5a623] border-[#f5a623]/30 shadow-lg shadow-[#f5a623]/5'
-                : 'bg-black/30 text-gray-500 border-gray-800 hover:text-gray-300'
-            }`}
-            title="음량 피크 평준화(Peak Normalization)"
-          >
-            <Sparkles className="w-3 h-3" />
-            노멀라이즈 {isNormalized ? 'ON' : 'OFF'}
-          </button>
-        )}
-      </div>
+      {/* 트랙 제목 */}
+      <h3 className="text-lg font-bold text-white mb-4 flex items-center">
+        <InlineEditor
+          initialValue={track.title}
+          onSave={handleUpdateTrack}
+          textClassName="text-lg font-bold text-white truncate"
+          readOnly={readOnly}
+        />
+      </h3>
 
       {/* 버전 목록 */}
       <div className="flex flex-col">
@@ -255,10 +194,26 @@ function VersionProgressBar({
   const isPlaying = useAudioStore(state => state.isPlaying);
   const setPlayingVersionId = useAudioStore(state => state.setPlayingVersionId);
   const setIsPlaying = useAudioStore(state => state.setIsPlaying);
-  const normalizedTrackIds = useAudioStore(state => state.normalizedTrackIds);
+  const normalizedVersionIds = useAudioStore(state => state.normalizedVersionIds);
  
   const isCurrent = playingVersionId === version.id;
-  const isNormalized = normalizedTrackIds[version.track_id] || false;
+  const isNormalized = normalizedVersionIds[version.id] || false;
+
+  // DB의 개별 버전 노멀라이즈 상태를 마운트/변경 시점에 스토어 상태로 역동기화 (게스트 뷰용)
+  useEffect(() => {
+    if (version) {
+      const dbNormalize = version.is_normalized === 1 || version.is_normalized === true;
+      const currentNormalize = useAudioStore.getState().normalizedVersionIds[version.id] || false;
+      if (currentNormalize !== dbNormalize) {
+        useAudioStore.setState((prev) => ({
+          normalizedVersionIds: {
+            ...prev.normalizedVersionIds,
+            [version.id]: dbNormalize
+          }
+        }));
+      }
+    }
+  }, [version, version.id]);
  
   // 스펙트럼 너비 비율
   const spectrumWidthPercent =

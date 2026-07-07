@@ -72,9 +72,12 @@ export async function POST(request: NextRequest) {
     const body = await request.json() as any;
     const { action, payload } = body;
 
-    // tracks 테이블에 is_normalized 컬럼 자동 생성 마이그레이션
+    // D1 테이블 자동 컬럼 추가 마이그레이션
     try {
       await executeActionQuery("ALTER TABLE tracks ADD COLUMN is_normalized INTEGER DEFAULT 0");
+    } catch (e) {}
+    try {
+      await executeActionQuery("ALTER TABLE versions ADD COLUMN is_normalized INTEGER DEFAULT 0");
     } catch (e) {}
 
     switch (action) {
@@ -250,6 +253,12 @@ export async function POST(request: NextRequest) {
       case "updateTrackNormalize":
         await executeActionQuery(
           "UPDATE tracks SET is_normalized = ? WHERE id = ?",
+          [payload.is_normalized ? 1 : 0, payload.id]
+        );
+        break;
+      case "updateVersionNormalize":
+        await executeActionQuery(
+          "UPDATE versions SET is_normalized = ? WHERE id = ?",
           [payload.is_normalized ? 1 : 0, payload.id]
         );
         break;

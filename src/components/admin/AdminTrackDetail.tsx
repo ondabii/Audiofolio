@@ -1,6 +1,6 @@
 'use client';
 
-import { useState, useRef } from 'react';
+import { useState, useRef, useEffect } from 'react';
 import { Star, Eye, EyeOff, UploadCloud, Trash2, Loader, Pencil, X, Sparkles } from 'lucide-react';
 import { useProjectStore } from '@/store/projectStore';
 import { useAudioStore } from '@/store/audioStore';
@@ -18,21 +18,34 @@ export function AdminTrackDetail({ track, projectId }: AdminTrackDetailProps) {
   const [uploadText, setUploadText] = useState('');
   const fileInputRef = useRef<HTMLInputElement>(null);
 
-  const normalizedTrackIds = useAudioStore(state => state.normalizedTrackIds);
+  const normalizedVersionIds = useAudioStore(state => state.normalizedVersionIds);
   const toggleNormalize = useAudioStore(state => state.toggleNormalize);
-  const isNormalized = normalizedTrackIds[track.id] || false;
 
-  const handleNormalizeToggle = async () => {
-    const nextVal = !isNormalized;
-    toggleNormalize(track.id);
+  // DB의 버전 노멀라이즈 상태를 오디오 엔진 상태로 동기화
+  useEffect(() => {
+    if (track && track.versions) {
+      const updates: Record<string, boolean> = {};
+      track.versions.forEach((v: any) => {
+        updates[v.id] = v.is_normalized === 1 || v.is_normalized === true;
+      });
+      useAudioStore.setState((prev) => ({
+        normalizedVersionIds: { ...prev.normalizedVersionIds, ...updates }
+      }));
+    }
+  }, [track]);
+
+  const handleVersionNormalizeToggle = async (versionId: string, currentNormalize: any) => {
+    const isNorm = currentNormalize === 1 || currentNormalize === true;
+    const nextVal = !isNorm;
+    toggleNormalize(versionId);
 
     // D1 DB 동기화
     await fetch('/api/actions', {
       method: 'POST',
       headers: { 'Content-Type': 'application/json' },
       body: JSON.stringify({
-        action: 'updateTrackNormalize',
-        payload: { id: track.id, is_normalized: nextVal }
+        action: 'updateVersionNormalize',
+        payload: { id: versionId, is_normalized: nextVal }
       })
     });
 
@@ -41,7 +54,15 @@ export function AdminTrackDetail({ track, projectId }: AdminTrackDetailProps) {
     if (currentProject) {
       const updatedCats = currentProject.categories.map(cat => ({
         ...cat,
-        tracks: cat.tracks.map(t => t.id === track.id ? { ...t, is_normalized: nextVal ? 1 : 0 } : t)
+        tracks: cat.tracks.map(t => {
+          if (t.versions?.some((v: any) => v.id === versionId)) {
+            return {
+              ...t,
+              versions: t.versions.map((v: any) => v.id === versionId ? { ...v, is_normalized: nextVal ? 1 : 0 } : v)
+            };
+          }
+          return t;
+        })
       }));
       useProjectStore.getState().setProject({ ...currentProject, categories: updatedCats });
     }
@@ -265,18 +286,6 @@ export function AdminTrackDetail({ track, projectId }: AdminTrackDetailProps) {
           </div>
         </div>
       <div className="flex gap-2 shrink-0">
-        <button
-          onClick={handleNormalizeToggle}
-          className={`flex items-center gap-1.5 px-3 py-1.5 rounded text-xs font-extrabold border transition-all ${
-            isNormalized
-              ? 'bg-[#f5a623]/10 text-[#f5a623] border-[#f5a623]/30 shadow-lg shadow-[#f5a623]/5'
-              : 'bg-[#1c2126] text-gray-500 border-gray-800 hover:text-gray-300 hover:bg-[#252b31]'
-          }`}
-          title="음량 피크 평준화(Peak Normalization)"
-        >
-          <Sparkles className="w-3.5 h-3.5" /> 음량 노멀라이즈 {isNormalized ? 'ON' : 'OFF'}
-        </button>
-
         <button 
           onClick={handleDeleteTrack} 
           className="text-red-500 hover:text-red-400 font-bold text-xs flex items-center gap-1.5 px-3 py-1.5 rounded bg-red-500/10 border border-red-500/20 hover:bg-red-500/20 transition-all"
@@ -352,7 +361,20 @@ export function AdminTrackDetail({ track, projectId }: AdminTrackDetailProps) {
                         />
                       </div>
                       {/* Right Tools: Eye & Delete */}
-                      <div className="flex items-center gap-2 shrink-0">
+                      <div className="flex items-center gap-2.5 shrink-0">
+                        {/* 버전별 음량 피크 노멀라이즈 */}
+                        <button
+                          onClick={() => handleVersionNormalizeToggle(version.id, version.is_normalized)}
+                          className={`p-1 transition-all hover:scale-110 ${
+                            version.is_normalized 
+                              ? 'text-[#f5a623]' 
+                              : 'text-gray-500 hover:text-[#f5a623]'
+                          }`}
+                          title={version.is_normalized ? "음량 노멀라이즈 활성화됨 (클릭 시 해제)" : "음량 노멀라이즈 활성화"}
+                        >
+                          <Sparkles className={`w-4 h-4 ${version.is_normalized ? 'fill-[#f5a623]' : ''}`} />
+                        </button>
+
                         <button 
                           onClick={() => handleToggleVisibility(version.id, isVis)}
                           className={`p-1 transition-colors ${isVis ? 'text-primary hover:text-gray-400' : 'text-gray-500 hover:text-primary'}`} 

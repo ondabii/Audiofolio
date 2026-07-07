@@ -19,8 +19,8 @@ interface AudioStoreState {
   loadingQueue: string[];
   // 각 버전별 3초 버퍼 준비 상태 맵
   versionStates: Record<string, VersionState>;
-  // 각 트랙별 볼륨 피크 노멀라이즈 토글 여부
-  normalizedTrackIds: Record<string, boolean>;
+  // 각 버전별 볼륨 피크 노멀라이즈 토글 여부
+  normalizedVersionIds: Record<string, boolean>;
   
   // 마스터 볼륨 (0.0 ~ 1.0)
   volume: number;
@@ -35,7 +35,7 @@ interface AudioStoreState {
   setIsPlaying: (isPlaying: boolean) => void;
   setLoadingQueue: (queue: string[]) => void;
   updateVersionState: (id: string, state: Partial<VersionState>) => void;
-  toggleNormalize: (trackId: string) => void;
+  toggleNormalize: (versionId: string) => void;
   setVolume: (volume: number) => void;
   requestSeek: (time: number) => void;
   clearSeekRequest: () => void;
@@ -49,7 +49,7 @@ export const useAudioStore = create<AudioStoreState>((set) => ({
   isPlaying: false,
   loadingQueue: [],
   versionStates: {},
-  normalizedTrackIds: {},
+  normalizedVersionIds: {},
   volume: 0.8,
   seekRequestTime: null,
 
@@ -67,10 +67,10 @@ export const useAudioStore = create<AudioStoreState>((set) => ({
       }
     }
   })),
-  toggleNormalize: (trackId) => set((prev) => ({
-    normalizedTrackIds: {
-      ...prev.normalizedTrackIds,
-      [trackId]: !prev.normalizedTrackIds[trackId]
+  toggleNormalize: (versionId) => set((prev) => ({
+    normalizedVersionIds: {
+      ...prev.normalizedVersionIds,
+      [versionId]: !prev.normalizedVersionIds[versionId]
     }
   })),
   setVolume: (volume) => set({ volume }),
@@ -83,7 +83,7 @@ export const useAudioStore = create<AudioStoreState>((set) => ({
     isPlaying: false,
     loadingQueue: [],
     versionStates: {},
-    normalizedTrackIds: {},
+    normalizedVersionIds: {},
     volume: 0.8,
     seekRequestTime: null
   })

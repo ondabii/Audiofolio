@@ -333,7 +333,7 @@ export function AudioEngine({ trackVersions = [] }: { trackVersions: TrackVersio
     const targetGain = ctx.createGain();
     
     // 볼륨 페이드인 기동 (노멀라이즈 적용 여부 확인 및 게인 보정값 연산)
-    const isNormalized = useAudioStore.getState().normalizedTrackIds[targetVersion.track_id] || false;
+    const isNormalized = useAudioStore.getState().normalizedVersionIds[targetVersionId] || false;
     const targetPeakVolume = isNormalized ? (1.0 / cachedTarget.maxPeak) : 1.0;
 
     targetGain.gain.setValueAtTime(0.0, now);
@@ -437,13 +437,11 @@ export function AudioEngine({ trackVersions = [] }: { trackVersions: TrackVersio
   }, [volume]);
 
   // ─── 실시간 노멀라이즈 토글 감지 및 램프 반영 ───
-  const normalizedTrackIds = useAudioStore(state => state.normalizedTrackIds);
+  const normalizedVersionIds = useAudioStore(state => state.normalizedVersionIds);
   useEffect(() => {
     if (!playingVersionId) return;
-    const targetVersion = trackVersions.find(v => v.id === playingVersionId);
-    if (!targetVersion) return;
 
-    const isNormalized = normalizedTrackIds[targetVersion.track_id] || false;
+    const isNormalized = normalizedVersionIds[playingVersionId] || false;
     const cached = buffersRef.current[playingVersionId];
     if (!cached) return;
 
@@ -459,7 +457,7 @@ export function AudioEngine({ trackVersions = [] }: { trackVersions: TrackVersio
       // 15ms 미세 볼륨 램프로 실시간 부드러운 스케일링 보정
       gainNode.gain.linearRampToValueAtTime(targetVol, now + 0.015);
     }
-  }, [normalizedTrackIds, playingVersionId, trackVersions]);
+  }, [normalizedVersionIds, playingVersionId]);
 
   return null;
 }
