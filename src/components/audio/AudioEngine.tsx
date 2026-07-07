@@ -391,11 +391,26 @@ export function AudioEngine({ trackVersions = [] }: { trackVersions: TrackVersio
       // 완전히 다른 트랙으로 전환되는 것이므로 재생 경과 시간을 0초로 리셋!
       setGlobalCurrentTime(0);
       setRawCurrentTime(0);
+
+      // 💡 다른 트랙으로 스왑 시, 로딩 완료 시점까지 재생바가 혼자 앞서나가는 현상 방지!
+      // 다운로드 및 디코딩 완료 직전에만 재생 상태(isPlaying = true)로 전환하도록 제어
+      if (isPlaying) {
+        useAudioStore.getState().setIsPlaying(false);
+        (async () => {
+          try {
+            await startSinglePlay(playingVersionId, 0);
+            useAudioStore.getState().setIsPlaying(true);
+          } catch (e) {
+            console.error(e);
+          }
+        })();
+        return;
+      }
     }
 
     if (isPlaying) {
       const targetTime = isSameTrack ? useAudioStore.getState().rawCurrentTime : 0;
-      startSinglePlay(playingVersionId, targetTime);
+      startSinglePlay(playingVersionId, targetTime).catch(e => console.error(e));
     } else {
       if (targetVersion) {
         loadAudioBuffer(targetVersion).catch(e => console.error(e));
