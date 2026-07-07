@@ -26,27 +26,7 @@ export default function AdminPinGate({ children }: AdminPinGateProps) {
     }
   }, []);
 
-  // 2. 키보드 입력 핸들러 추가
-  useEffect(() => {
-    if (verified) return;
 
-    const handleKeyDown = (e: KeyboardEvent) => {
-      if (loading) return;
-      
-      if (e.key >= '0' && e.key <= '9') {
-        if (pin.length < 6) {
-          setError(false);
-          setPin(prev => prev + e.key);
-        }
-      } else if (e.key === 'Backspace') {
-        setError(false);
-        setPin(prev => prev.slice(0, -1));
-      }
-    };
-
-    window.addEventListener('keydown', handleKeyDown);
-    return () => window.removeEventListener('keydown', handleKeyDown);
-  }, [pin, verified, loading]);
 
   // 3. 6자리가 다 차면 자동 검증 API 트리거
   useEffect(() => {
