@@ -77,7 +77,7 @@ export async function POST(request: NextRequest) {
       await executeActionQuery("ALTER TABLE tracks ADD COLUMN is_normalized INTEGER DEFAULT 0");
     } catch (e) {}
     try {
-      await executeActionQuery("ALTER TABLE versions ADD COLUMN is_normalized INTEGER DEFAULT 0");
+      await executeActionQuery("ALTER TABLE track_versions ADD COLUMN is_normalized INTEGER DEFAULT 0");
     } catch (e) {}
 
     switch (action) {
@@ -258,7 +258,7 @@ export async function POST(request: NextRequest) {
         break;
       case "updateVersionNormalize":
         await executeActionQuery(
-          "UPDATE versions SET is_normalized = ? WHERE id = ?",
+          "UPDATE track_versions SET is_normalized = ? WHERE id = ?",
           [payload.is_normalized ? 1 : 0, payload.id]
         );
         break;
