@@ -28,15 +28,11 @@ export function DashboardClient({ initialProjects }: DashboardClientProps) {
     }
   }, []);
 
-  // 💡 온라인일 때 원격 Worker API에서 실시간 프로젝트 목록을 페칭하고 오프라인 캐시에 저장합니다.
+  // 💡 실시간 D1 데이터베이스 API (/api/projects)에서 프로젝트 목록을 페칭하고 로컬 캐시에 저장합니다.
   useEffect(() => {
     async function loadProjects() {
       try {
-        const apiUrl = process.env.NEXT_PUBLIC_API_URL 
-          ? `${process.env.NEXT_PUBLIC_API_URL}/api/projects`
-          : '/api/projects';
-
-        const res = await fetch(apiUrl);
+        const res = await fetch('/api/projects');
         if (res.ok) {
           const data = await res.json();
           if (Array.isArray(data) && data.length > 0) {
@@ -46,7 +42,7 @@ export function DashboardClient({ initialProjects }: DashboardClientProps) {
           }
         }
       } catch (e) {
-        console.warn("Failed to fetch remote projects, trying local cache:", e);
+        console.warn("Failed to fetch D1 projects, trying local cache:", e);
       }
 
       // 💡 원격 페칭 실패 시 (오프라인 상태) 로컬 스토리지 캐시에서 복원

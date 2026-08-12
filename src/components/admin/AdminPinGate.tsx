@@ -39,29 +39,21 @@ export default function AdminPinGate({ children }: AdminPinGateProps) {
     try {
       let isVerified = false;
 
-      // 1. 원격 API를 통해 D1 PIN 검증 시도
-      try {
-        const apiUrl = process.env.NEXT_PUBLIC_API_URL 
-          ? `${process.env.NEXT_PUBLIC_API_URL}/api/actions`
-          : '/api/actions';
+      // 1. 실시간 D1 서버 API (/api/actions)를 통해 PIN 검증
+      const res = await fetch('/api/actions', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({
+          action: 'verifyAdminPin',
+          payload: { pin: inputPin }
+        })
+      });
 
-        const res = await fetch(apiUrl, {
-          method: 'POST',
-          headers: { 'Content-Type': 'application/json' },
-          body: JSON.stringify({
-            action: 'verifyAdminPin',
-            payload: { pin: inputPin }
-          })
-        });
-
-        if (res.ok) {
-          const data = await res.json() as { verified?: boolean; success?: boolean };
-          if (data.verified) {
-            isVerified = true;
-          }
+      if (res.ok) {
+        const data = await res.json() as { verified?: boolean; success?: boolean };
+        if (data.verified) {
+          isVerified = true;
         }
-      } catch (fetchErr) {
-        console.warn("PIN API fetch failed:", fetchErr);
       }
 
       // 💡 D1 등록 실제 패스코드 (161017) 대조 승인

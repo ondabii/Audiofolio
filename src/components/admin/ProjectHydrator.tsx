@@ -19,14 +19,10 @@ export function ProjectHydrator({ initialData, project, children }: ProjectHydra
     async function hydrateData() {
       const alias = data?.custom_alias || data?.short_id || data?.id;
 
-      // 1. 온라인 시 원격 Worker API에서 프로젝트 상세(카테고리/트랙/버전) 실시간 페칭
+      // 1. 실시간 D1 데이터베이스 API (/api/projects/[alias])에서 상세 데이터 페칭
       if (alias) {
         try {
-          const apiUrl = process.env.NEXT_PUBLIC_API_URL 
-            ? `${process.env.NEXT_PUBLIC_API_URL}/api/projects/${alias}?admin=true`
-            : `/api/projects/${alias}?admin=true`;
-
-          const res = await fetch(apiUrl);
+          const res = await fetch(`/api/projects/${alias}?admin=true`);
           if (res.ok) {
             const remoteProject = await res.json();
             if (remoteProject && !remoteProject.error && remoteProject.title) {
@@ -37,7 +33,7 @@ export function ProjectHydrator({ initialData, project, children }: ProjectHydra
             }
           }
         } catch (e) {
-          console.warn("Failed to fetch remote project details, trying local cache:", e);
+          console.warn("Failed to fetch D1 project details, trying local cache:", e);
         }
       }
 
