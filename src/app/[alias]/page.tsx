@@ -4,12 +4,17 @@ import { PinGate } from '@/components/public/PinGate';
 
 export const dynamicParams = true;
 
-export default async function ProjectPublicPage({ params }: { params: Promise<{ alias: string }> }) {
-  const p = await params;
+interface PageProps {
+  params: Promise<{ alias: string }>;
+}
+
+export default async function ProjectPublicPage({ params }: PageProps) {
+  const resolvedParams = await params;
+  const alias = resolvedParams?.alias || 'default';
   
   const project = {
-    id: p?.alias || 'offline',
-    custom_alias: p?.alias || 'offline',
+    id: alias,
+    custom_alias: alias,
     title: 'Audiofolio Project',
     categories: [],
     is_offline_placeholder: true

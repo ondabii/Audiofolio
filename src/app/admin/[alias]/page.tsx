@@ -4,9 +4,13 @@ import { CleanUrlClient } from './CleanUrlClient';
 
 export const dynamicParams = true;
 
-export default async function AdminProjectPage({ params }: { params: Promise<{ alias: string }> }) {
+interface PageProps {
+  params: Promise<{ alias: string }>;
+}
+
+export default async function AdminProjectPage({ params }: PageProps) {
   const resolvedParams = await params;
-  const projectAlias = resolvedParams?.alias || 'offline';
+  const projectAlias = resolvedParams?.alias || 'default';
   
   const projectData = {
     id: projectAlias,
