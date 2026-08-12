@@ -2,10 +2,7 @@ import { ProjectHydrator } from '@/components/admin/ProjectHydrator';
 import { PublicClientLayout } from '@/components/public/PublicClientLayout';
 import { PinGate } from '@/components/public/PinGate';
 
-export async function generateStaticParams() {
-  return [{ alias: 'default' }];
-}
-export const dynamicParams = false;
+export const dynamicParams = true;
 
 export default async function ProjectPublicPage({ params }: { params: Promise<{ alias: string }> }) {
   const p = await params;
