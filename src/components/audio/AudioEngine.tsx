@@ -158,7 +158,21 @@ export function AudioEngine({ trackVersions = [] }: { trackVersions: TrackVersio
 
     updateVersionState(id, { isReady: false });
     const url = `/api/audio-url?key=${encodeURIComponent(version.audio_url)}`;
-    const res = await fetch(url);
+    
+    // 💡 Cache API 가로채기 (오프라인 재생 지원)
+    let res: Response;
+    try {
+      const cache = await caches.open('audiofolio-audio-v1');
+      const cachedRes = await cache.match(url);
+      if (cachedRes) {
+        res = cachedRes;
+      } else {
+        res = await fetch(url);
+      }
+    } catch (e) {
+      res = await fetch(url);
+    }
+    
     if (!res.ok) throw new Error(`HTTP error: ${res.status}`);
 
     const arrayBuffer = await res.arrayBuffer();
@@ -408,14 +422,20 @@ export function AudioEngine({ trackVersions = [] }: { trackVersions: TrackVersio
     }
   }, [playingVersionId, trackVersions, isPlaying, startSinglePlay, loadAudioBuffer, stopAllSources, setGlobalCurrentTime, setRawCurrentTime]);
 
+  const pauseTimeRef = useRef<number>(0);
+
   // ─── isPlaying 변경 처리 ───
   useEffect(() => {
     if (isPlaying) {
       if (!isPlayingRef.current && playingVersionId) {
         const store = useAudioStore.getState();
-        startSinglePlay(playingVersionId, store.rawCurrentTime);
+        const resumeTime = pauseTimeRef.current > 0 ? pauseTimeRef.current : store.rawCurrentTime;
+        startSinglePlay(playingVersionId, resumeTime);
       }
     } else {
+      // 💡 일시정지 시 현재 이어서 재생할 정밀 시각을 pauseTimeRef에 보존
+      const store = useAudioStore.getState();
+      pauseTimeRef.current = store.rawCurrentTime;
       stopAllSources();
       isPlayingRef.current = false;
     }

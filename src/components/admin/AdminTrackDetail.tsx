@@ -266,8 +266,54 @@ export function AdminTrackDetail({ track, projectId }: AdminTrackDetailProps) {
     }
   };
 
+  const [isDragOver, setIsDragOver] = useState(false);
+
+  const handleDragOver = (e: React.DragEvent) => {
+    e.preventDefault();
+    e.stopPropagation();
+    if (!isDragOver) setIsDragOver(true);
+  };
+
+  const handleDragLeave = (e: React.DragEvent) => {
+    e.preventDefault();
+    e.stopPropagation();
+    // Only turn off if leaving the outer container
+    if (e.currentTarget.contains(e.relatedTarget as Node)) return;
+    setIsDragOver(false);
+  };
+
+  const handleDrop = (e: React.DragEvent) => {
+    e.preventDefault();
+    e.stopPropagation();
+    setIsDragOver(false);
+    
+    if (e.dataTransfer.files && e.dataTransfer.files.length > 0) {
+      const droppedFile = e.dataTransfer.files[0];
+      if (droppedFile.type.startsWith('audio/') || /\.(wav|mp3|ogg|flac|m4a|aac)$/i.test(droppedFile.name)) {
+        handleUploadFile(droppedFile);
+      } else {
+        alert("오디오 파일(WAV, MP3, OGG, FLAC 등)만 업로드 가능합니다.");
+      }
+    }
+  };
+
   return (
-    <div className="flex-1 flex flex-col bg-[#111416] min-w-0 lg:min-w-[400px] h-full">
+    <div 
+      onDragOver={handleDragOver}
+      onDragLeave={handleDragLeave}
+      onDrop={handleDrop}
+      className={`flex-1 flex flex-col bg-[#111416] min-w-0 lg:min-w-[400px] h-full relative transition-colors ${
+        isDragOver ? 'border-2 border-primary border-dashed bg-primary/5' : ''
+      }`}
+    >
+      {/* Full-panel drag overlay hint */}
+      {isDragOver && (
+        <div className="absolute inset-0 bg-[#111416]/90 backdrop-blur-sm z-30 flex flex-col items-center justify-center pointer-events-none p-6 text-center animate-fade-in">
+          <UploadCloud className="w-16 h-16 text-primary animate-bounce mb-3" />
+          <p className="text-lg font-extrabold text-white">이 위치에 오디오 파일을 놓아 업로드하세요</p>
+          <p className="text-xs text-gray-400 font-bold mt-1">WAV, MP3, FLAC, OGG 지원 (자동 메타데이터 & R2 적재)</p>
+        </div>
+      )}
       {/* Track Title Header */}
       <div className="p-6 border-b border-[#22272c] shrink-0 flex justify-between items-center bg-[#111416]">
         <div className="min-w-0 flex-1 pr-4">

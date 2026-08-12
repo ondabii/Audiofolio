@@ -1,7 +1,7 @@
 import type { NextConfig } from "next";
 
 const nextConfig: NextConfig = {
-  /* Cloudflare Edge 렌더링을 위해 output: 'export'는 사용하지 않습니다. */
+  output: 'export',
   eslint: {
     ignoreDuringBuilds: true,
   },

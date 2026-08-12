@@ -5,10 +5,14 @@ import { Sidebar } from '@/components/layout/Sidebar';
 import { TrackItem } from '@/components/audio/TrackItem';
 import { AudioEngine } from '@/components/audio/AudioEngine';
 import { BottomBarPlayer } from '@/components/audio/BottomBarPlayer';
+import { OfflineDownloadBanner } from '@/components/audio/OfflineDownloadBanner';
 import { Lock } from 'lucide-react';
+
+import { useRef } from 'react';
 
 export function PublicClientLayout() {
   const project = useProjectStore(state => state.project);
+  const mainScrollRef = useRef<HTMLDivElement>(null);
   
   if (!project) return null;
 
@@ -16,15 +20,32 @@ export function PublicClientLayout() {
     cat.tracks.flatMap(t => t.versions)
   );
 
+  // 💡 좌측 사이드바 버튼을 제외한 모든 외부 배경 공간에서 휠 조작 시 메인 재생 영역 스크롤
+  const handleOuterWheel = (e: React.WheelEvent) => {
+    if (mainScrollRef.current) {
+      mainScrollRef.current.scrollTop += e.deltaY;
+    }
+  };
+
   return (
-    <div className="w-full h-full flex bg-[#111416] overflow-hidden justify-center relative pl-0 lg:pl-64">
+    <div 
+      onWheel={handleOuterWheel}
+      className="w-full h-full flex bg-[#111416] overflow-hidden justify-center relative pl-0 lg:pl-64 touch-pan-y"
+    >
       <AudioEngine trackVersions={allVersions} />
       <BottomBarPlayer />
 
       <Sidebar projectTitle={project.title} categories={project.categories} />
       
-      <main className="w-full max-w-4xl h-full overflow-y-auto pt-24 lg:pt-20 px-4 lg:px-10 pb-40 z-10 relative scrollbar-hide">
+      <main 
+        ref={mainScrollRef}
+        className="w-full max-w-4xl h-full overflow-y-auto pt-24 lg:pt-20 px-4 lg:px-10 pb-40 z-10 relative scrollbar-hide touch-pan-y"
+      >
         <div id="top-anchor" className="absolute top-0 left-0 w-full h-1"></div>
+        
+        {/* 오프라인 배너 */}
+        <OfflineDownloadBanner />
+
         <div className="flex items-center justify-between mb-16">
           <h1 className="hidden lg:block text-2xl font-bold text-white tracking-tight flex-1">
             {project.title}

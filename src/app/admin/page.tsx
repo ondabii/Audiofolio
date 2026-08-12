@@ -1,12 +1,9 @@
-import { getAllProjects } from '@/lib/db';
+'use client';
+
 import { DashboardClient } from '@/components/admin/DashboardClient';
 
-export const runtime = 'edge';
-
-export default async function AdminPage() {
-  const projects = await getAllProjects();
-
+export default function AdminPage() {
   return (
-    <DashboardClient initialProjects={projects} />
+    <DashboardClient initialProjects={[]} />
   );
 }

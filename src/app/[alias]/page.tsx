@@ -1,18 +1,22 @@
-import { getProjectData } from '@/lib/db';
-import { notFound } from 'next/navigation';
 import { ProjectHydrator } from '@/components/admin/ProjectHydrator';
 import { PublicClientLayout } from '@/components/public/PublicClientLayout';
 import { PinGate } from '@/components/public/PinGate';
 
-export const runtime = 'edge';
+export async function generateStaticParams() {
+  return [{ alias: 'default' }];
+}
+export const dynamicParams = false;
 
 export default async function ProjectPublicPage({ params }: { params: Promise<{ alias: string }> }) {
   const p = await params;
-  const project = await getProjectData(p.alias);
-
-  if (!project) {
-    notFound();
-  }
+  
+  const project = {
+    id: p?.alias || 'offline',
+    custom_alias: p?.alias || 'offline',
+    title: 'Audiofolio Project',
+    categories: [],
+    is_offline_placeholder: true
+  };
 
   return (
     <ProjectHydrator project={project}>

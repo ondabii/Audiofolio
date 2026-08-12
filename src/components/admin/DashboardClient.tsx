@@ -1,8 +1,9 @@
 'use client';
 
-import { useState } from 'react';
+import { useState, useEffect } from 'react';
 import { AudioLines, Plus, Pencil, ExternalLink, Trash2, Lock, HardDrive } from 'lucide-react';
 import Link from 'next/link';
+import { saveProjectsListToLocalStorage, getProjectsListFromLocalStorage } from '@/lib/offlineCache';
 
 interface DashboardClientProps {
   initialProjects: any[];
@@ -10,6 +11,55 @@ interface DashboardClientProps {
 
 export function DashboardClient({ initialProjects }: DashboardClientProps) {
   const [projects, setProjects] = useState<any[]>(initialProjects);
+  const [isOffline, setIsOffline] = useState(false);
+
+  // 💡 네트워크 상태 감지 훅
+  useEffect(() => {
+    if (typeof window !== 'undefined') {
+      setIsOffline(!navigator.onLine);
+      const handleOnline = () => setIsOffline(false);
+      const handleOffline = () => setIsOffline(true);
+      window.addEventListener('online', handleOnline);
+      window.addEventListener('offline', handleOffline);
+      return () => {
+        window.removeEventListener('online', handleOnline);
+        window.removeEventListener('offline', handleOffline);
+      };
+    }
+  }, []);
+
+  // 💡 온라인일 때 원격 Worker API에서 실시간 프로젝트 목록을 페칭하고 오프라인 캐시에 저장합니다.
+  useEffect(() => {
+    async function loadProjects() {
+      try {
+        const apiUrl = process.env.NEXT_PUBLIC_API_URL 
+          ? `${process.env.NEXT_PUBLIC_API_URL}/api/projects`
+          : '/api/projects';
+
+        const res = await fetch(apiUrl);
+        if (res.ok) {
+          const data = await res.json();
+          if (Array.isArray(data) && data.length > 0) {
+            setProjects(data);
+            saveProjectsListToLocalStorage(data);
+            return;
+          }
+        }
+      } catch (e) {
+        console.warn("Failed to fetch remote projects, trying local cache:", e);
+      }
+
+      // 💡 원격 페칭 실패 시 (오프라인 상태) 로컬 스토리지 캐시에서 복원
+      const offlineList = getProjectsListFromLocalStorage();
+      if (offlineList && offlineList.length > 0) {
+        setProjects(offlineList);
+      } else if (initialProjects && initialProjects.length > 0) {
+        setProjects(initialProjects);
+      }
+    }
+
+    loadProjects();
+  }, [initialProjects]);
 
   const handleCreateProject = async () => {
     const title = prompt("새 프로젝트 제목을 입력하세요:");
@@ -17,22 +67,37 @@ export function DashboardClient({ initialProjects }: DashboardClientProps) {
 
     const shortId = 'project-' + Math.random().toString(36).substring(2, 8);
     const id = crypto.randomUUID();
+    const newProj = {
+      id,
+      title,
+      short_id: shortId,
+      custom_alias: shortId,
+      created_at: new Date().toISOString(),
+      categories: []
+    };
 
-    const res = await fetch('/api/actions', {
-      method: 'POST',
-      headers: { 'Content-Type': 'application/json' },
-      body: JSON.stringify({
-        action: 'createProject',
-        payload: { id, title, short_id: shortId }
-      })
-    });
+    try {
+      const apiUrl = process.env.NEXT_PUBLIC_API_URL 
+        ? `${process.env.NEXT_PUBLIC_API_URL}/api/actions`
+        : '/api/actions';
 
-    if (res.ok) {
-      // Redirect directly to the editor of the new project
-      window.location.href = `/admin/${shortId}`;
-    } else {
-      alert("프로젝트 생성 중 오류가 발생했습니다.");
+      await fetch(apiUrl, {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({
+          action: 'createProject',
+          payload: { id, title, short_id: shortId }
+        })
+      });
+    } catch (e) {
+      console.warn("Server create project failed, saving locally:", e);
     }
+
+    // 💡 로컬 목록 및 스토리지에 새 프로젝트 즉시 보존 후 편집기 진입
+    const updated = [newProj, ...projects];
+    setProjects(updated);
+    saveProjectsListToLocalStorage(updated);
+    window.location.href = `/admin/${shortId}`;
   };
 
   const handleDeleteProject = async (id: string, title: string) => {
@@ -51,9 +116,9 @@ export function DashboardClient({ initialProjects }: DashboardClientProps) {
   };
 
   return (
-    <div className="flex flex-col min-h-screen bg-[#111416] w-full text-white">
+    <div className="flex flex-col min-h-screen bg-[#111416] w-full text-white overflow-y-auto touch-pan-y antialiased">
       {/* Global Top Header */}
-      <header className="h-16 flex items-center justify-between px-6 border-b border-[#22272c] shrink-0 bg-[#111416] w-full">
+      <header className="h-16 flex items-center justify-between px-4 lg:px-6 border-b border-[#22272c] shrink-0 bg-[#111416] w-full z-20 sticky top-0">
         <Link href="/admin" className="relative z-20 flex items-center gap-2 font-extrabold tracking-tight text-xl text-white hover:text-primary transition-colors cursor-pointer select-none">
           <AudioLines className="text-primary w-6 h-6" />
           Audiofolio
@@ -63,26 +128,33 @@ export function DashboardClient({ initialProjects }: DashboardClientProps) {
         <div className="flex justify-end">
           <button 
             onClick={() => window.location.href = '/'}
-            className="text-sm bg-[#1c2126] text-gray-300 font-bold px-4 py-2 rounded hover:text-white hover:bg-[#252b31] transition-colors border border-[#22272c]"
+            className="text-xs lg:text-sm bg-[#1c2126] text-gray-300 font-bold px-3 py-1.5 lg:px-4 lg:py-2 rounded hover:text-white hover:bg-[#252b31] transition-colors border border-[#22272c]"
           >
-            메인으로 돌아가기
+            페이지 보기
           </button>
         </div>
       </header>
 
       {/* Main Dashboard Panel (Centered 2/3 width) */}
-      <div className="flex-1 flex justify-center bg-[#111416] py-12 px-6">
+      <div className="flex-1 flex justify-center bg-[#111416] py-6 lg:py-12 px-4 lg:px-6 pb-24">
         <div className="w-full lg:w-[66%] max-w-6xl flex flex-col">
           
           {/* Action Header */}
-          <div className="flex justify-between items-center mb-8 shrink-0">
+          <div className="flex flex-col sm:flex-row justify-between items-start sm:items-center gap-4 mb-6 lg:mb-8 shrink-0">
             <div>
-              <h1 className="text-2xl font-extrabold text-white tracking-tight">프로젝트 대시보드</h1>
+              <h1 className="text-xl lg:text-2xl font-extrabold text-white tracking-tight flex items-center gap-2">
+                프로젝트 대시보드
+                {isOffline && (
+                  <span className="text-[10px] font-extrabold px-1.5 py-0.5 bg-[#f5a623]/10 text-[#f5a623] border border-[#f5a623]/25 rounded uppercase tracking-wider">
+                    오프라인
+                  </span>
+                )}
+              </h1>
               <p className="text-xs text-gray-500 font-bold mt-1">포트폴리오 프로젝트 목록을 관리하고 새 프로젝트를 생성합니다.</p>
             </div>
             <button 
               onClick={handleCreateProject}
-              className="flex items-center gap-2 bg-primary hover:bg-primary/95 text-black font-extrabold px-4 py-2 rounded transition-colors text-sm shadow-lg shadow-primary/10"
+              className="w-full sm:w-auto flex items-center justify-center gap-2 bg-primary hover:bg-primary/95 text-black font-extrabold px-4 py-2.5 rounded transition-colors text-sm shadow-lg shadow-primary/10"
             >
               <Plus className="w-4 h-4" /> 새 프로젝트 생성
             </button>
@@ -145,8 +217,6 @@ export function DashboardClient({ initialProjects }: DashboardClientProps) {
                         </Link>
                         <Link 
                           href={publicUrl}
-                          target="_blank"
-                          rel="noopener noreferrer"
                           className="p-1.5 rounded bg-[#1c2126] border border-[#22272c] text-gray-300 hover:text-primary hover:bg-[#252b31] transition-colors" 
                           title="게스트 공개 페이지 보기"
                         >

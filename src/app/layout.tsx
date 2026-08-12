@@ -1,7 +1,9 @@
 import type { Metadata } from "next";
 import "./globals.css";
 
-export const runtime = 'edge';
+if (typeof self === 'undefined') {
+  (globalThis as any).self = globalThis;
+}
 
 export const metadata: Metadata = {
   title: "Audiofolio",

@@ -7,6 +7,7 @@ import { BottomBarPlayer } from '@/components/audio/BottomBarPlayer';
 import { InlineEditor } from '@/components/admin/InlineEditor';
 import { AdminTrackDetail } from '@/components/admin/AdminTrackDetail';
 import { SortableSidebarTrack } from '@/components/admin/SortableSidebarTrack';
+import { OfflineDownloadBanner } from '@/components/audio/OfflineDownloadBanner';
 import { Plus, Trash2, AudioLines, Settings, ArrowUp, ArrowDown, X } from 'lucide-react';
 import { DndContext, closestCenter, KeyboardSensor, PointerSensor, useSensor, useSensors } from '@dnd-kit/core';
 import { SortableContext, sortableKeyboardCoordinates, verticalListSortingStrategy } from '@dnd-kit/sortable';
@@ -207,42 +208,43 @@ export function AdminClientLayout({ projects }: { projects: any[] }) {
   const publicUrl = `/${project.custom_alias || project.short_id || project.id}`;
 
   return (
-    <div className="h-screen w-screen overflow-hidden antialiased flex flex-col bg-[#111416]">
+    <div className="min-h-screen lg:h-screen w-screen overflow-y-auto lg:overflow-hidden antialiased flex flex-col bg-[#111416] touch-pan-y">
       <AudioEngine trackVersions={allVersions} />
       <BottomBarPlayer />
       
       {/* Global Top Header */}
-      <header className="h-16 flex items-center justify-between px-6 border-b border-[#22272c] shrink-0 bg-[#111416] w-full z-10">
-        <Link href="/admin" className="relative z-20 flex items-center gap-2 font-extrabold tracking-tight text-xl w-fit text-white hover:text-primary transition-colors cursor-pointer select-none">
-          <AudioLines className="text-primary w-6 h-6" />
+      <header className="h-16 flex items-center justify-between px-4 lg:px-6 border-b border-[#22272c] shrink-0 bg-[#111416] w-full z-10 sticky top-0">
+        <Link href="/admin" className="relative z-20 flex items-center gap-2 font-extrabold tracking-tight text-lg lg:text-xl w-fit text-white hover:text-primary transition-colors cursor-pointer select-none">
+          <AudioLines className="text-primary w-5 h-5 lg:w-6 lg:h-6" />
           Audiofolio
           <span className="text-xs text-primary font-bold ml-1 px-1.5 py-0.5 bg-primary/10 rounded">ADMIN</span>
         </Link>
         <div className="flex-1"></div>
-        <div className="flex justify-end w-1/3 gap-3">
+        <div className="flex justify-end w-auto lg:w-1/3 gap-2 lg:gap-3">
           <a 
             href="/admin"
-            className="text-sm bg-[#1c2126] text-gray-300 font-bold px-4 py-2 rounded hover:text-white hover:bg-[#252b31] transition-colors border border-[#22272c]"
+            className="text-xs lg:text-sm bg-[#1c2126] text-gray-300 font-bold px-3 py-1.5 lg:px-4 lg:py-2 rounded hover:text-white hover:bg-[#252b31] transition-colors border border-[#22272c]"
           >
             프로젝트 목록
           </a>
           <a 
             href={publicUrl}
-            target="_blank"
-            rel="noopener noreferrer"
-            className="text-sm bg-[#1c2126] text-gray-300 font-bold px-4 py-2 rounded hover:text-white hover:bg-[#252b31] transition-colors border border-[#22272c]"
+            className="text-xs lg:text-sm bg-[#1c2126] text-gray-300 font-bold px-3 py-1.5 lg:px-4 lg:py-2 rounded hover:text-white hover:bg-[#252b31] transition-colors border border-[#22272c]"
           >
             페이지 보기
           </a>
         </div>
       </header>
       
-      {/* 2-Pane Content Wrapper (Centered and restricted on wider screens) */}
-      <div className="flex-1 flex justify-center bg-[#111416] overflow-hidden w-full pb-16">
-        <div className="w-full lg:w-[66%] max-w-6xl flex overflow-hidden border-x border-[#22272c] bg-[#111416] h-full">
+      {/* 2-Pane Content Wrapper (Responsive flex-col on mobile, flex-row on desktop) */}
+      <div className="flex-1 flex flex-col items-center bg-[#111416] overflow-y-auto lg:overflow-hidden w-full pb-24 lg:pb-16 px-4 lg:px-0">
+        <div className="w-full lg:w-[66%] max-w-6xl mt-4 shrink-0">
+          <OfflineDownloadBanner />
+        </div>
+        <div className="w-full lg:w-[66%] max-w-6xl flex flex-col lg:flex-row overflow-visible lg:overflow-hidden border border-[#22272c] bg-[#111416] h-auto lg:h-full rounded-xl my-4">
           
-          {/* Left Pane: Tree/Category Sidebar Editor */}
-          <aside className="w-80 bg-[#15191c] border-r border-[#22272c] flex flex-col shrink-0 h-full">
+          {/* Left Pane: Tree/Category Sidebar Editor (Responsive full width on mobile) */}
+          <aside className="w-full lg:w-80 bg-[#15191c] border-b lg:border-b-0 lg:border-r border-[#22272c] flex flex-col shrink-0 min-h-[300px] lg:h-full">
             {/* Project Title Header */}
             <div className="p-4 border-b border-[#22272c] flex justify-between items-center bg-[#1c2126] shrink-0">
               <div className="font-extrabold text-white text-lg flex items-center gap-2 min-w-0 flex-1 pr-2 truncate">
@@ -476,7 +478,7 @@ export function AdminClientLayout({ projects }: { projects: any[] }) {
                       
                       if (res.ok) {
                         alert("어드민 보안 PIN 번호가 성공적으로 변경되었습니다.");
-                        sessionStorage.setItem('admin_verified', 'true');
+                        localStorage.setItem('admin_verified', 'true');
                         setTempAdminPin('');
                       } else {
                         alert("PIN 번호 변경 실패");

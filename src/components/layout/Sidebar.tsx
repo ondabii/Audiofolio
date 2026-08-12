@@ -43,10 +43,36 @@ export function Sidebar({ projectTitle = 'Audiofolio Project', categories = [] }
       )}
 
       {/* Sidebar Content */}
-      <aside className={`fixed inset-y-0 left-0 z-30 w-64 bg-main-bg transform ${isOpen ? 'translate-x-0' : '-translate-x-full'} lg:translate-x-0 transition-transform duration-300 ease-in-out flex flex-col h-full pt-20 lg:pt-10`}>
-        <div className="px-6 flex-1 overflow-y-auto scrollbar-hide">
+      <aside className={`fixed inset-y-0 left-0 z-30 w-64 bg-main-bg transform ${isOpen ? 'translate-x-0' : '-translate-x-full'} lg:translate-x-0 transition-transform duration-300 ease-in-out flex flex-col h-full pt-20 lg:pt-10 select-none`}>
+        <style>{`
+          .custom-fading-scrollbar {
+            scrollbar-width: thin;
+            scrollbar-color: rgba(245, 166, 35, 0.25) transparent;
+            transition: scrollbar-color 0.3s ease;
+          }
+          .custom-fading-scrollbar:hover,
+          .custom-fading-scrollbar:active {
+            scrollbar-color: rgba(245, 166, 35, 0.75) rgba(255, 255, 255, 0.05);
+          }
+          .custom-fading-scrollbar::-webkit-scrollbar {
+            width: 5px;
+          }
+          .custom-fading-scrollbar::-webkit-scrollbar-track {
+            background: transparent;
+          }
+          .custom-fading-scrollbar::-webkit-scrollbar-thumb {
+            background-color: rgba(245, 166, 35, 0.2);
+            border-radius: 9999px;
+            transition: background-color 0.3s ease;
+          }
+          .custom-fading-scrollbar:hover::-webkit-scrollbar-thumb,
+          .custom-fading-scrollbar:active::-webkit-scrollbar-thumb {
+            background-color: rgba(245, 166, 35, 0.75);
+          }
+        `}</style>
+        <div className="px-6 flex-1 overflow-y-auto custom-fading-scrollbar">
           <div className="mb-10">
-            <button onClick={() => { document.getElementById('top-anchor')?.scrollIntoView({ behavior: 'smooth' }); handleLinkClick(); }} className="text-sm font-medium text-white hover:text-gray-300 transition-colors text-left w-full outline-none">
+            <button onClick={() => { document.getElementById('top-anchor')?.scrollIntoView({ behavior: 'smooth' }); handleLinkClick(); }} className="text-sm font-bold text-white hover:text-primary transition-colors text-left w-full outline-none">
               {projectTitle}
             </button>
           </div>
