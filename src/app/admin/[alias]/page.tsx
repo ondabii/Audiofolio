@@ -2,6 +2,7 @@ import { ProjectHydrator } from '@/components/admin/ProjectHydrator';
 import { AdminClientLayout } from '@/components/admin/AdminClientLayout';
 import { CleanUrlClient } from './CleanUrlClient';
 
+export const runtime = 'edge';
 export const dynamicParams = true;
 
 interface PageProps {
