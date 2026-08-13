@@ -7,9 +7,6 @@ node_modules/
 /.next/
 /out/
 
-# 프로덕션 빌드
-/build
-
 # 환경 변수 — 절대 커밋 금지
 .env
 .env.local

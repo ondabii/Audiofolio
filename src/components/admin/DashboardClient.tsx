@@ -28,7 +28,7 @@ export function DashboardClient({ initialProjects }: DashboardClientProps) {
     }
   }, []);
 
-  // 💡 실시간 D1 데이터베이스 API (/api/projects)에서 프로젝트 목록을 페칭하고 로컬 캐시에 저장합니다.
+  // 💡 실시간 D1 데이터베이스 API (/api/projects)에서 프로젝트 목록을 페칭하고 로컬 캐시에 저장합니다. (Updated 2026-08-13)
   useEffect(() => {
     async function loadProjects() {
       try {

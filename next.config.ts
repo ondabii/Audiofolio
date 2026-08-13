@@ -1,5 +1,4 @@
-import type { NextConfig } from "next";
-
+// Cloudflare Pages & Mobile Static Export Build Config (Updated 2026-08-13)
 const nextConfig: NextConfig = {
   ...(process.env.STATIC_EXPORT === 'true' ? { output: 'export' as const } : {}),
   eslint: {

@@ -1,3 +1,4 @@
+// D1 Direct Database All Projects Route (Updated 2026-08-13)
 import { NextRequest, NextResponse } from 'next/server';
 import { getAllProjects } from '@/lib/db';
 

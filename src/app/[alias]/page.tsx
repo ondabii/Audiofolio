@@ -2,6 +2,7 @@ import { ProjectHydrator } from '@/components/admin/ProjectHydrator';
 import { PublicClientLayout } from '@/components/public/PublicClientLayout';
 import { PinGate } from '@/components/public/PinGate';
 
+// 💡 All dynamic alias routes enabled (Updated 2026-08-13)
 export const dynamicParams = true;
 
 interface PageProps {
