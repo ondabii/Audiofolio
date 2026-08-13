@@ -194,8 +194,7 @@ export function AdminTrackDetail({ track, projectId }: AdminTrackDetailProps) {
     }
   };
 
-  const handleFileChange = async (e: React.ChangeEvent<HTMLInputElement>) => {
-    const file = e.target.files?.[0];
+  const handleUploadFile = async (file: File) => {
     if (!file) return;
 
     setIsUploading(true);
@@ -263,6 +262,13 @@ export function AdminTrackDetail({ track, projectId }: AdminTrackDetailProps) {
       setUploadProgress(0);
       setUploadText('');
       if (fileInputRef.current) fileInputRef.current.value = '';
+    }
+  };
+
+  const handleFileChange = async (e: React.ChangeEvent<HTMLInputElement>) => {
+    const file = e.target.files?.[0];
+    if (file) {
+      handleUploadFile(file);
     }
   };
 
