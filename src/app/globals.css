@@ -10,6 +10,11 @@
   color-scheme: dark;
 }
 
+html, body {
+  overscroll-behavior-y: auto;
+  -webkit-overflow-scrolling: touch;
+}
+
 body {
   background-color: var(--color-main-bg);
   color: #e5e7eb;
