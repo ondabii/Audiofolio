@@ -42,10 +42,6 @@ export function PublicClientLayout() {
         className="w-full max-w-4xl h-full overflow-y-auto pt-24 lg:pt-20 px-4 lg:px-10 pb-40 z-10 relative scrollbar-hide touch-pan-y"
       >
         <div id="top-anchor" className="absolute top-0 left-0 w-full h-1"></div>
-        
-        {/* 오프라인 배너 */}
-        <OfflineDownloadBanner />
-
         <div className="flex items-center justify-between mb-16">
           <h1 className="hidden lg:block text-2xl font-bold text-white tracking-tight flex-1">
             {project.title}

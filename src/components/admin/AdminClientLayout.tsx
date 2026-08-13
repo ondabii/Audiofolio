@@ -238,9 +238,6 @@ export function AdminClientLayout({ projects }: { projects: any[] }) {
       
       {/* 2-Pane Content Wrapper (Responsive flex-col on mobile, flex-row on desktop) */}
       <div className="flex-1 flex flex-col items-center bg-[#111416] overflow-y-auto lg:overflow-hidden w-full pb-24 lg:pb-16 px-4 lg:px-0">
-        <div className="w-full lg:w-[66%] max-w-6xl mt-4 shrink-0">
-          <OfflineDownloadBanner />
-        </div>
         <div className="w-full lg:w-[66%] max-w-6xl flex flex-col lg:flex-row overflow-visible lg:overflow-hidden border border-[#22272c] bg-[#111416] h-auto lg:h-full rounded-xl my-4">
           
           {/* Left Pane: Tree/Category Sidebar Editor (Responsive full width on mobile) */}

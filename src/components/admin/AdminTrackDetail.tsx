@@ -267,28 +267,44 @@ export function AdminTrackDetail({ track, projectId }: AdminTrackDetailProps) {
   };
 
   const [isDragOver, setIsDragOver] = useState(false);
+  const dragCounterRef = useRef(0);
+
+  const handleDragEnter = (e: React.DragEvent) => {
+    e.preventDefault();
+    e.stopPropagation();
+    dragCounterRef.current++;
+    if (e.dataTransfer.items && e.dataTransfer.items.length > 0) {
+      e.dataTransfer.dropEffect = 'copy';
+      setIsDragOver(true);
+    }
+  };
 
   const handleDragOver = (e: React.DragEvent) => {
     e.preventDefault();
     e.stopPropagation();
+    e.dataTransfer.dropEffect = 'copy';
     if (!isDragOver) setIsDragOver(true);
   };
 
   const handleDragLeave = (e: React.DragEvent) => {
     e.preventDefault();
     e.stopPropagation();
-    // Only turn off if leaving the outer container
-    if (e.currentTarget.contains(e.relatedTarget as Node)) return;
-    setIsDragOver(false);
+    dragCounterRef.current--;
+    if (dragCounterRef.current <= 0) {
+      dragCounterRef.current = 0;
+      setIsDragOver(false);
+    }
   };
 
   const handleDrop = (e: React.DragEvent) => {
     e.preventDefault();
     e.stopPropagation();
+    dragCounterRef.current = 0;
     setIsDragOver(false);
     
-    if (e.dataTransfer.files && e.dataTransfer.files.length > 0) {
-      const droppedFile = e.dataTransfer.files[0];
+    const files = e.dataTransfer.files;
+    if (files && files.length > 0) {
+      const droppedFile = files[0];
       if (droppedFile.type.startsWith('audio/') || /\.(wav|mp3|ogg|flac|m4a|aac)$/i.test(droppedFile.name)) {
         handleUploadFile(droppedFile);
       } else {
@@ -299,6 +315,7 @@ export function AdminTrackDetail({ track, projectId }: AdminTrackDetailProps) {
 
   return (
     <div 
+      onDragEnter={handleDragEnter}
       onDragOver={handleDragOver}
       onDragLeave={handleDragLeave}
       onDrop={handleDrop}
@@ -308,10 +325,10 @@ export function AdminTrackDetail({ track, projectId }: AdminTrackDetailProps) {
     >
       {/* Full-panel drag overlay hint */}
       {isDragOver && (
-        <div className="absolute inset-0 bg-[#111416]/90 backdrop-blur-sm z-30 flex flex-col items-center justify-center pointer-events-none p-6 text-center animate-fade-in">
+        <div className="absolute inset-0 bg-[#111416]/95 backdrop-blur-md z-40 flex flex-col items-center justify-center pointer-events-none p-6 text-center animate-fade-in">
           <UploadCloud className="w-16 h-16 text-primary animate-bounce mb-3" />
-          <p className="text-lg font-extrabold text-white">이 위치에 오디오 파일을 놓아 업로드하세요</p>
-          <p className="text-xs text-gray-400 font-bold mt-1">WAV, MP3, FLAC, OGG 지원 (자동 메타데이터 & R2 적재)</p>
+          <p className="text-xl font-extrabold text-white">이 위치에 오디오 파일을 놓으세요</p>
+          <p className="text-sm text-gray-400 font-bold mt-2">WAV, MP3, FLAC, OGG 오디오 파일 드롭 업로드 지원</p>
         </div>
       )}
       {/* Track Title Header */}
