@@ -19,12 +19,16 @@ export async function GET(request: NextRequest, { params }: { params: Promise<{ 
     const isAdmin = url.searchParams.get("admin") === "true";
     
     if (!isAdmin) {
-      // Filter out non-visible versions
+      // Filter out non-visible versions for guest public view
       data.categories = data.categories.map((c: any) => ({
         ...c,
         tracks: c.tracks.map((t: any) => ({
           ...t,
-          versions: t.versions.filter((v: any) => v.is_visible && v.status === 'active')
+          versions: t.versions.filter((v: any) => {
+            const isVisible = v.is_visible === true || v.is_visible === 1 || v.is_visible === '1';
+            const isActive = v.status ? v.status === 'active' : true;
+            return isVisible && isActive;
+          })
         }))
       }));
     }

@@ -16,8 +16,9 @@ export function PublicClientLayout() {
   
   if (!project) return null;
 
+  // 💡 공개 페이지에서는 is_visible이 true인 활성 버전만 오디오 엔진에 등록
   const allVersions = project.categories.flatMap(cat => 
-    cat.tracks.flatMap(t => t.versions)
+    cat.tracks.flatMap(t => (t.versions || []).filter((v: any) => v.is_visible === true || v.is_visible === 1 || v.is_visible === '1'))
   );
 
   // 💡 좌측 사이드바 버튼을 제외한 모든 외부 배경 공간에서 휠 조작 시 메인 재생 영역 스크롤

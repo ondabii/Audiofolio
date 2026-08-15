@@ -13,7 +13,11 @@ export function TrackItem({ track, readOnly = false }: { track: any; readOnly?: 
   const setPlayingVersionId = useAudioStore(state => state.setPlayingVersionId);
   const setIsPlaying = useAudioStore(state => state.setIsPlaying);
 
-  const versions: any[] = track.versions ?? [];
+  // 💡 공개 페이지(readOnly === true)에서는 is_visible이 true인 버전만 노출
+  const rawVersions: any[] = track.versions ?? [];
+  const versions: any[] = readOnly
+    ? rawVersions.filter((v: any) => v.is_visible === true || v.is_visible === 1 || v.is_visible === '1')
+    : rawVersions;
   const isDownloadable = track.is_downloadable === 1 || track.is_downloadable === true;
 
   const handleDownloadVersion = async (v: any) => {

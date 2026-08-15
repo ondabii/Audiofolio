@@ -8,9 +8,10 @@ interface ProjectHydratorProps {
   initialData?: ProjectData;
   project?: ProjectData;
   children?: React.ReactNode;
+  isAdmin?: boolean;
 }
 
-export function ProjectHydrator({ initialData, project, children }: ProjectHydratorProps) {
+export function ProjectHydrator({ initialData, project, children, isAdmin = false }: ProjectHydratorProps) {
   const setProject = useProjectStore(state => state.setProject);
   const isHydrated = useRef(false);
   const data = (initialData || project) as any;
@@ -22,7 +23,8 @@ export function ProjectHydrator({ initialData, project, children }: ProjectHydra
       // 1. 실시간 D1 데이터베이스 API (/api/projects/[alias])에서 상세 데이터 페칭
       if (alias) {
         try {
-          const res = await fetch(`/api/projects/${alias}?admin=true`);
+          const queryUrl = isAdmin ? `/api/projects/${alias}?admin=true` : `/api/projects/${alias}`;
+          const res = await fetch(queryUrl);
           if (res.ok) {
             const remoteProject = await res.json();
             if (remoteProject && !remoteProject.error && remoteProject.title) {

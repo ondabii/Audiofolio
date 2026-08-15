@@ -24,7 +24,7 @@ export default async function AdminProjectPage({ params }: PageProps) {
   return (
     <>
       <CleanUrlClient />
-      <ProjectHydrator initialData={projectData} />
+      <ProjectHydrator initialData={projectData} isAdmin={true} />
       <AdminClientLayout projects={[]} />
     </>
   );
