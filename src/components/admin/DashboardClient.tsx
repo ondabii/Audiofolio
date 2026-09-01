@@ -57,57 +57,69 @@ export function DashboardClient({ initialProjects }: DashboardClientProps) {
     loadProjects();
   }, [initialProjects]);
 
+  const [isCreating, setIsCreating] = useState(false);
+
   const handleCreateProject = async () => {
     const title = prompt("새 프로젝트 제목을 입력하세요:");
-    if (!title) return;
+    if (!title || !title.trim()) return;
 
+    setIsCreating(true);
     const shortId = 'project-' + Math.random().toString(36).substring(2, 8);
     const id = crypto.randomUUID();
+    const defaultCatId = crypto.randomUUID();
+
     const newProj = {
       id,
-      title,
+      title: title.trim(),
       short_id: shortId,
       custom_alias: shortId,
       created_at: new Date().toISOString(),
-      categories: []
+      categories: [
+        { id: defaultCatId, project_id: id, title: 'General', order_index: 0, tracks: [] }
+      ]
     };
 
     try {
-      const apiUrl = process.env.NEXT_PUBLIC_API_URL 
-        ? `${process.env.NEXT_PUBLIC_API_URL}/api/actions`
-        : '/api/actions';
-
-      await fetch(apiUrl, {
+      const res = await fetch('/api/actions', {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
         body: JSON.stringify({
           action: 'createProject',
-          payload: { id, title, short_id: shortId }
+          payload: { id, title: title.trim(), short_id: shortId }
         })
       });
+
+      if (!res.ok) {
+        throw new Error("서버 프로젝트 생성 응답 오류");
+      }
     } catch (e) {
       console.warn("Server create project failed, saving locally:", e);
+    } finally {
+      // 💡 로컬 목록 및 스토리지에 새 프로젝트 즉시 보존 후 편집기 진입
+      const updated = [newProj, ...projects];
+      setProjects(updated);
+      saveProjectsListToLocalStorage(updated);
+      setIsCreating(false);
+      window.location.href = `/admin/${shortId}`;
     }
-
-    // 💡 로컬 목록 및 스토리지에 새 프로젝트 즉시 보존 후 편집기 진입
-    const updated = [newProj, ...projects];
-    setProjects(updated);
-    saveProjectsListToLocalStorage(updated);
-    window.location.href = `/admin/${shortId}`;
   };
 
   const handleDeleteProject = async (id: string, title: string) => {
     if (confirm(`'${title}' 프로젝트와 모든 오디오 데이터를 영구 삭제하시겠습니까?`)) {
       setProjects(prev => prev.filter(p => p.id !== id));
       
-      await fetch('/api/actions', {
-        method: 'POST',
-        headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({
-          action: 'deleteProject',
-          payload: { id }
-        })
-      });
+      try {
+        await fetch('/api/actions', {
+          method: 'POST',
+          headers: { 'Content-Type': 'application/json' },
+          body: JSON.stringify({
+            action: 'deleteProject',
+            payload: { id }
+          })
+        });
+      } catch (e) {
+        console.error("Delete project error:", e);
+      }
     }
   };
 

@@ -388,6 +388,10 @@ export function AudioEngine({ trackVersions = [] }: { trackVersions: TrackVersio
     })();
   }, [trackVersions, getAudioContext, stopAllSources, loadAudioBuffer, startSync, getMasterGain]);
 
+  const currentTrackIdRef = useRef<string | null>(null);
+  const pauseTimeRef = useRef<number>(0);
+  const pauseTrackIdRef = useRef<string | null>(null);
+
   // ─── playingVersionId 변경 처리 (0ms 크로스페이드 AB 스위칭) ───
   useEffect(() => {
     if (!playingVersionId) {
@@ -397,16 +401,17 @@ export function AudioEngine({ trackVersions = [] }: { trackVersions: TrackVersio
     }
 
     const targetVersion = trackVersions.find(v => v.id === playingVersionId);
-    const prevActiveVersionId = Object.keys(sourcesRef.current)[0];
-    const prevVersion = prevActiveVersionId ? trackVersions.find(v => v.id === prevActiveVersionId) : null;
-    const isSameTrack = prevVersion && targetVersion && prevVersion.track_id === targetVersion.track_id;
+    const targetTrackId = targetVersion?.track_id || null;
+    const isSameTrack = currentTrackIdRef.current !== null && currentTrackIdRef.current === targetTrackId;
 
     if (!isSameTrack) {
-      // 완전히 다른 트랙으로 전환되는 것이므로 재생 경과 시간을 0초로 리셋!
+      // 💡 완전히 다른 트랙으로 전환되는 것이므로 재생 경과 시간 및 일시정지 기억을 0초로 완전 리셋!
+      currentTrackIdRef.current = targetTrackId;
+      pauseTimeRef.current = 0;
+      pauseTrackIdRef.current = null;
       setGlobalCurrentTime(0);
       setRawCurrentTime(0);
 
-      // 💡 다른 트랙으로 스왑 시, 로딩 완료 시점까지 재생바가 혼자 앞서나가는 현상 방지!
       // 로컬 재생 타이머 루프를 즉각 멈춰 동기 대기 시킵니다.
       stopAllSources();
       isPlayingRef.current = false;
@@ -414,6 +419,8 @@ export function AudioEngine({ trackVersions = [] }: { trackVersions: TrackVersio
 
     if (isPlaying) {
       const targetTime = isSameTrack ? useAudioStore.getState().rawCurrentTime : 0;
+      pauseTimeRef.current = 0;
+      pauseTrackIdRef.current = null;
       startSinglePlay(playingVersionId, targetTime).catch(e => console.error(e));
     } else {
       if (targetVersion) {
@@ -422,28 +429,42 @@ export function AudioEngine({ trackVersions = [] }: { trackVersions: TrackVersio
     }
   }, [playingVersionId, trackVersions, isPlaying, startSinglePlay, loadAudioBuffer, stopAllSources, setGlobalCurrentTime, setRawCurrentTime]);
 
-  const pauseTimeRef = useRef<number>(0);
-
   // ─── isPlaying 변경 처리 ───
   useEffect(() => {
     if (isPlaying) {
       if (!isPlayingRef.current && playingVersionId) {
+        const targetVersion = trackVersions.find(v => v.id === playingVersionId);
+        const targetTrackId = targetVersion?.track_id || null;
+        const isSameTrackAsPaused = pauseTrackIdRef.current !== null && pauseTrackIdRef.current === targetTrackId;
+
         const store = useAudioStore.getState();
-        const resumeTime = pauseTimeRef.current > 0 ? pauseTimeRef.current : store.rawCurrentTime;
+        // 💡 같은 트랙일 때만 pauseTime을 이어서 재생하고, 다른 트랙이면 0초부터 시작!
+        const resumeTime = isSameTrackAsPaused && pauseTimeRef.current > 0 
+          ? pauseTimeRef.current 
+          : (isSameTrackAsPaused ? store.rawCurrentTime : 0);
+
+        pauseTimeRef.current = 0;
+        pauseTrackIdRef.current = null;
+        currentTrackIdRef.current = targetTrackId;
+
         startSinglePlay(playingVersionId, resumeTime);
       }
     } else {
-      // 💡 일시정지 시 현재 이어서 재생할 정밀 시각을 pauseTimeRef에 보존
+      // 💡 일시정지 시 현재 트랙 ID와 시각을 보존
       const store = useAudioStore.getState();
+      const currentVersion = trackVersions.find(v => v.id === playingVersionId);
       pauseTimeRef.current = store.rawCurrentTime;
+      pauseTrackIdRef.current = currentVersion?.track_id || null;
       stopAllSources();
       isPlayingRef.current = false;
     }
-  }, [isPlaying, playingVersionId, startSinglePlay, stopAllSources]);
+  }, [isPlaying, playingVersionId, trackVersions, startSinglePlay, stopAllSources]);
 
   // ─── Seek 처리 ───
   useEffect(() => {
     if (seekRequestTime === null) return;
+    pauseTimeRef.current = 0;
+    pauseTrackIdRef.current = null;
     if (isPlaying) {
       startSinglePlay(playingVersionId, seekRequestTime);
     } else {

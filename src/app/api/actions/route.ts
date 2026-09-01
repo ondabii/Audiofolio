@@ -72,24 +72,29 @@ export async function POST(request: NextRequest) {
     const body = await request.json() as any;
     const { action, payload } = body;
 
-    // D1 테이블 자동 컬럼 추가 마이그레이션
-    try {
-      await executeActionQuery("ALTER TABLE tracks ADD COLUMN is_normalized INTEGER DEFAULT 0");
-    } catch (e) {}
-    try {
-      await executeActionQuery("ALTER TABLE tracks ADD COLUMN is_downloadable INTEGER DEFAULT 0");
-    } catch (e) {}
-    try {
-      await executeActionQuery("ALTER TABLE track_versions ADD COLUMN is_normalized INTEGER DEFAULT 0");
-    } catch (e) {}
-
     switch (action) {
       case "createProject":
-        await executeActionQuery(
-          "INSERT INTO projects (id, user_id, title, short_id, custom_alias) VALUES (?, ?, ?, ?, ?)",
-          [payload.id, 'default_user', payload.title, payload.short_id, payload.short_id]
-        );
-        break;
+        const defaultCatId = crypto.randomUUID();
+        await executeActionBatch([
+          {
+            sql: "INSERT INTO projects (id, user_id, title, short_id, custom_alias) VALUES (?, ?, ?, ?, ?)",
+            params: [payload.id, 'default_user', payload.title, payload.short_id, payload.short_id]
+          },
+          {
+            sql: "INSERT INTO categories (id, project_id, title, order_index) VALUES (?, ?, ?, ?)",
+            params: [defaultCatId, payload.id, 'General', 0]
+          }
+        ]);
+        return NextResponse.json({ 
+          success: true, 
+          project: {
+            id: payload.id,
+            title: payload.title,
+            short_id: payload.short_id,
+            custom_alias: payload.short_id,
+            categories: [{ id: defaultCatId, project_id: payload.id, title: 'General', order_index: 0, tracks: [] }]
+          }
+        });
       case "renameProject":
         await executeActionQuery("UPDATE projects SET title = ? WHERE id = ?", [payload.title, payload.id]);
         break;
