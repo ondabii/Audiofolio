@@ -1,7 +1,7 @@
 'use client';
 
 import { useState, useRef, useEffect } from 'react';
-import { Star, Eye, EyeOff, UploadCloud, Trash2, Loader, Pencil, X, Sparkles, Download } from 'lucide-react';
+import { Star, Eye, EyeOff, UploadCloud, Trash2, Loader, Pencil, X, Sparkles, Download, Code, Copy, Check } from 'lucide-react';
 import { useProjectStore } from '@/store/projectStore';
 import { useAudioStore } from '@/store/audioStore';
 import { InlineEditor } from '@/components/admin/InlineEditor';
@@ -17,6 +17,9 @@ export function AdminTrackDetail({ track, projectId }: AdminTrackDetailProps) {
   const [uploadProgress, setUploadProgress] = useState(0);
   const [uploadText, setUploadText] = useState('');
   const fileInputRef = useRef<HTMLInputElement>(null);
+
+  const [isEmbedModalOpen, setIsEmbedModalOpen] = useState(false);
+  const [isCopied, setIsCopied] = useState(false);
 
   const normalizedVersionIds = useAudioStore(state => state.normalizedVersionIds);
   const toggleNormalize = useAudioStore(state => state.toggleNormalize);
@@ -381,6 +384,14 @@ export function AdminTrackDetail({ track, projectId }: AdminTrackDetailProps) {
         </div>
       <div className="flex gap-2 shrink-0">
         <button
+          onClick={() => setIsEmbedModalOpen(true)}
+          className="flex items-center gap-1.5 px-3 py-1.5 rounded text-xs font-extrabold bg-[#1c2126] text-gray-300 hover:text-white border border-[#22272c] hover:border-primary/50 transition-all cursor-pointer"
+          title="외부 사이트 삽입용 iframe 임베드 코드 생성"
+        >
+          <Code className="w-3.5 h-3.5 text-primary" /> 임베드
+        </button>
+
+        <button
           onClick={handleDownloadableToggle}
           className={`flex items-center gap-1.5 px-3 py-1.5 rounded text-xs font-extrabold border transition-all ${
             isDownloadable
@@ -543,6 +554,68 @@ export function AdminTrackDetail({ track, projectId }: AdminTrackDetailProps) {
           </div>
         </div>
       </div>
+
+      {/* ── 임베드 코드 복사 모달 ── */}
+      {isEmbedModalOpen && (
+        <div className="fixed inset-0 z-50 flex items-center justify-center p-4 bg-black/75 backdrop-blur-sm animate-fade-in">
+          <div className="bg-[#161a1d] border border-[#22272c] rounded-xl max-w-lg w-full p-6 shadow-2xl relative">
+            <button
+              onClick={() => setIsEmbedModalOpen(false)}
+              className="absolute top-4 right-4 text-gray-400 hover:text-white p-1 rounded-lg hover:bg-[#22272c] transition-colors"
+            >
+              <X className="w-5 h-5" />
+            </button>
+
+            <div className="flex items-center gap-2 mb-3">
+              <div className="w-8 h-8 rounded-lg bg-primary/10 border border-primary/20 flex items-center justify-center">
+                <Code className="w-4 h-4 text-primary" />
+              </div>
+              <div>
+                <h3 className="text-base font-bold text-white">트랙 임베드 코드 생성</h3>
+                <p className="text-xs text-gray-400">{track.title} 전용 위젯</p>
+              </div>
+            </div>
+
+            <p className="text-xs text-gray-400 mb-4 leading-relaxed">
+              노션(Notion), 개인 블로그, 포트폴리오 사이트 등에 아래의 <code className="text-primary font-mono bg-black/40 px-1 py-0.5 rounded">&lt;iframe&gt;</code> 코드를 붙여넣으면 가로폭에 맞춰 가변형으로 반응하는 오디오 플레이어가 삽입됩니다. (오토플레이 없음)
+            </p>
+
+            <div className="bg-black/60 border border-[#22272c] rounded-lg p-3 relative font-mono text-xs text-gray-300 mb-4 select-all break-all">
+              {`<iframe src="${typeof window !== 'undefined' ? window.location.origin : 'https://audiofolio.ondabii.com'}/embed/track/${track.id}" width="100%" height="${Math.min(140 + (track.versions?.length || 1) * 35, 260)}" frameborder="0"></iframe>`}
+            </div>
+
+            <div className="flex items-center justify-between pt-2">
+              <span className="text-[11px] text-gray-500 font-medium">
+                권장 높이: {Math.min(140 + (track.versions?.length || 1) * 35, 260)}px (가로폭 100% 자동 반응)
+              </span>
+              <button
+                onClick={() => {
+                  const origin = typeof window !== 'undefined' ? window.location.origin : 'https://audiofolio.ondabii.com';
+                  const embedCode = `<iframe src="${origin}/embed/track/${track.id}" width="100%" height="${Math.min(140 + (track.versions?.length || 1) * 35, 260)}" frameborder="0"></iframe>`;
+                  navigator.clipboard.writeText(embedCode);
+                  setIsCopied(true);
+                  setTimeout(() => setIsCopied(false), 2000);
+                }}
+                className={`flex items-center gap-1.5 px-4 py-2 rounded-lg text-xs font-bold transition-all ${
+                  isCopied
+                    ? 'bg-emerald-600 text-white'
+                    : 'bg-primary text-black hover:bg-primary/90 font-extrabold cursor-pointer'
+                }`}
+              >
+                {isCopied ? (
+                  <>
+                    <Check className="w-4 h-4" /> 복사 완료!
+                  </>
+                ) : (
+                  <>
+                    <Copy className="w-4 h-4" /> 코드 복사하기
+                  </>
+                )}
+              </button>
+            </div>
+          </div>
+        </div>
+      )}
     </div>
   );
 }

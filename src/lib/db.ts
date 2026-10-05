@@ -202,3 +202,108 @@ export async function getAllProjects() {
     throw error;
   }
 }
+
+export interface EmbedTrackResponse {
+  track: {
+    id: string;
+    title: string;
+    category_id: string;
+    is_downloadable: boolean;
+    is_normalized: boolean;
+    versions: VersionData[];
+  };
+  project: {
+    id: string;
+    title: string;
+    custom_alias: string;
+    short_id?: string;
+  };
+}
+
+export async function getEmbedTrackData(trackId: string): Promise<EmbedTrackResponse | null> {
+  try {
+    const { results: trackRes } = await executeD1Query(
+      "SELECT * FROM tracks WHERE id = ?",
+      [trackId]
+    );
+
+    if (!trackRes || trackRes.length === 0) {
+      return null;
+    }
+
+    const trackRow = trackRes[0];
+
+    // Project Info Query
+    const { results: projRes } = await executeD1Query(
+      `SELECT p.id, p.title, p.custom_alias, p.short_id 
+       FROM projects p 
+       JOIN categories c ON c.project_id = p.id 
+       WHERE c.id = ?`,
+      [trackRow.category_id]
+    );
+
+    const projectInfo = projRes?.[0] || {
+      id: '',
+      title: 'Audiofolio',
+      custom_alias: ''
+    };
+
+    // Versions Query (공개용 활성 버전만 선별)
+    const { results: versionRows } = await executeD1Query(
+      `SELECT * FROM track_versions 
+       WHERE track_id = ? 
+         AND (is_visible = 1 OR is_visible = true) 
+         AND (status = 'active' OR status IS NULL)
+       ORDER BY order_index ASC, created_at DESC`,
+      [trackId]
+    );
+
+    let env: Record<string, string | undefined> = process.env;
+    try {
+      const ctx = getRequestContext();
+      if (ctx && ctx.env) env = ctx.env as Record<string, string | undefined>;
+    } catch (e) {}
+
+    const R2_PUBLIC_URL = env.R2_PUBLIC_URL || "https://afc.ondabii.com";
+
+    const versions: VersionData[] = (versionRows || []).map((v: Record<string, unknown>) => ({
+      id: String(v.id),
+      track_id: String(v.track_id),
+      title: v.title ? String(v.title) : undefined,
+      audio_url: String(v.audio_url),
+      public_url: R2_PUBLIC_URL
+        ? `${R2_PUBLIC_URL}/${String(v.audio_url).split('/').map(seg => encodeURIComponent(seg)).join('/')}`
+        : String(v.audio_url),
+      is_representative: v.is_representative === 1 || v.is_representative === true,
+      is_visible: v.is_visible === 1 || v.is_visible === true,
+      duration_ms: typeof v.duration_ms === 'number' ? v.duration_ms : undefined,
+      file_format: v.file_format ? String(v.file_format) : undefined,
+      bitrate: typeof v.bitrate === 'number' ? v.bitrate : undefined,
+      file_size_bytes: typeof v.file_size_bytes === 'number' ? v.file_size_bytes : undefined,
+      waveform_data: v.waveform_data ? String(v.waveform_data) : undefined,
+      is_normalized: v.is_normalized === 1 || v.is_normalized === true,
+      order_index: typeof v.order_index === 'number' ? v.order_index : 0
+    }));
+
+    return {
+      track: {
+        id: String(trackRow.id),
+        title: String(trackRow.title),
+        category_id: String(trackRow.category_id),
+        is_downloadable: trackRow.is_downloadable === 1 || trackRow.is_downloadable === true,
+        is_normalized: trackRow.is_normalized === 1 || trackRow.is_normalized === true,
+        versions
+      },
+      project: {
+        id: String(projectInfo.id),
+        title: String(projectInfo.title),
+        custom_alias: String(projectInfo.custom_alias || projectInfo.short_id || projectInfo.id),
+        short_id: projectInfo.short_id ? String(projectInfo.short_id) : undefined
+      }
+    };
+  } catch (error) {
+    console.error("❌ Failed to fetch embed track data:", trackId, error);
+    throw error;
+  }
+}
+

@@ -1,4 +1,5 @@
-// Cloudflare Pages & Mobile Static Export Build Config (Updated 2026-08-13)
+import type { NextConfig } from "next";
+
 const nextConfig: NextConfig = {
   ...(process.env.STATIC_EXPORT === 'true' ? { output: 'export' as const } : {}),
   eslint: {
@@ -14,7 +15,24 @@ const nextConfig: NextConfig = {
   env: {
     // R2_PUBLIC_URL은 오디오 URL을 서버에서 조립할 때만 사용 — 값 자체는 공개 도메인이므로 무방
     R2_PUBLIC_URL: process.env.R2_PUBLIC_URL || "https://afc.ondabii.com",
-  }
+  },
+  async headers() {
+    return [
+      {
+        source: '/embed/:path*',
+        headers: [
+          {
+            key: 'Content-Security-Policy',
+            value: "frame-ancestors *",
+          },
+          {
+            key: 'Access-Control-Allow-Origin',
+            value: '*',
+          },
+        ],
+      },
+    ];
+  },
 };
 
 export default nextConfig;
