@@ -359,13 +359,15 @@ export function AudioEngine({ trackVersions = [] }: { trackVersions: TrackVersio
     targetSource.loopStart = effectiveLoopStart;
     targetSource.loopEnd = effectiveLoopEnd;
 
-    // 💡 플레이리스트 연속 재생: 한 곡 완주 시 다음 버전으로 바톤 터치
+    // 💡 플레이리스트 연속 재생: 한 곡 완주 시 다음 버전으로 바톤 터치 (00:00부터 시작)
     if (isPlaylistMode) {
       targetSource.onended = () => {
         if (taskId === playTaskIdRef.current && isPlayingRef.current) {
           const currentIndex = siblingVersions.findIndex(v => v.id === targetVersionId);
           if (currentIndex >= 0 && currentIndex < siblingVersions.length - 1) {
             const nextVersion = siblingVersions[currentIndex + 1];
+            setGlobalCurrentTime(0);
+            setRawCurrentTime(0);
             useAudioStore.getState().setPlayingVersionId(nextVersion.id);
             startSinglePlay(nextVersion.id, 0);
           } else {
@@ -407,14 +409,17 @@ export function AudioEngine({ trackVersions = [] }: { trackVersions: TrackVersio
     // 타임라인 동기화
     startSync(maxDuration, isPlaylistMode);
 
-    // 4. 나머지 형제 버전들은 백그라운드 프리로드만 수행하고, 소스는 재생하지 않음! (부하 0%)
-    const remainingVersions = sortedSiblings.filter(v => v.id !== targetVersionId);
+    // 4. 백그라운드 프리로드 (캐시 적재만 진행, 소스 재생은 하지 않음)
+    // 💡 연속 재생 모드: 대역폭과 메모리 절약을 위해 모든 버전 순차로드 대신 '오직 다음 곡(N+1)' 1개만 프리로드
+    // 💡 AB 비교 모드: 즉각적인 A/B 스위칭을 위해 인접 버전들을 순차 프리로드
+    const preloadTargets = isPlaylistMode
+      ? (targetIndex >= 0 && targetIndex < siblingVersions.length - 1 ? [siblingVersions[targetIndex + 1]] : [])
+      : sortedSiblings.filter(v => v.id !== targetVersionId);
 
     (async () => {
-      for (const ver of remainingVersions) {
+      for (const ver of preloadTargets) {
         if (taskId !== playTaskIdRef.current) return;
         try {
-          // 캐시 적재만 진행 (CreateBufferSource 재생은 호출 안 함)
           await loadAudioBuffer(ver);
         } catch (e) {
           console.error(`백그라운드 프리로드 실패: ${ver.title}`, e);
@@ -472,12 +477,36 @@ export function AudioEngine({ trackVersions = [] }: { trackVersions: TrackVersio
       return;
     }
 
-    // 일시정지 상태에서 재개(Resume)하거나, 같은 트랙의 다른 버전으로 AB 스위칭하는 경우
+    // 해당 트랙의 재생 모드 확인 (연속 재생 vs AB 비교)
+    const project = useProjectStore.getState().project;
+    const currentTrack = project?.categories
+      ?.flatMap((c: any) => c.tracks || [])
+      ?.find((t: any) => t.id === targetTrackId);
+    const isPlaylistMode = currentTrack?.playback_mode === 'playlist';
+
+    // 일시정지 상태에서 재개(Resume)하거나, 같은 트랙의 다른 버전으로 전환하는 경우
     const isSameTrackAsPaused = pauseTrackIdRef.current !== null && pauseTrackIdRef.current === targetTrackId;
     const store = useAudioStore.getState();
-    const resumeTime = isSameTrackAsPaused && pauseTimeRef.current > 0
-      ? pauseTimeRef.current
-      : store.rawCurrentTime;
+
+    // 💡 연속재생(isPlaylistMode) 모드에서 다음 버전으로 넘어가면 무조건 00:00(0초)부터 시작!
+    let resumeTime = 0;
+    if (isPlaylistMode) {
+      if (isSameVersion && isSameTrackAsPaused && pauseTimeRef.current > 0) {
+        resumeTime = pauseTimeRef.current;
+      } else if (isSameVersion) {
+        resumeTime = store.rawCurrentTime;
+      } else {
+        // 새 버전으로 넘어간 경우 무조건 0초부터 시작!
+        resumeTime = 0;
+        setGlobalCurrentTime(0);
+        setRawCurrentTime(0);
+      }
+    } else {
+      // AB 비교 모드: 같은 트랙 내 버전 간 스위칭 시 동일 재생 위치(rawCurrentTime) 유지
+      resumeTime = isSameTrackAsPaused && pauseTimeRef.current > 0
+        ? pauseTimeRef.current
+        : store.rawCurrentTime;
+    }
 
     pauseTimeRef.current = 0;
     pauseTrackIdRef.current = null;

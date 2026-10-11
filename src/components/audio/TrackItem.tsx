@@ -73,12 +73,18 @@ export function TrackItem({ track, readOnly = false }: { track: any; readOnly?: 
     ? (versions.some((v: any) => v.id === playingVersionId) ?? false)
     : false;
 
+  const isPlaylist = track.playback_mode === 'playlist';
+
   // 버전 재생/정지 토글
   const handlePlayToggle = (versionId: string) => {
     initAudioContext();
     if (playingVersionId === versionId) {
       setIsPlaying(!isPlaying);
     } else {
+      if (isPlaylist) {
+        useAudioStore.getState().setGlobalCurrentTime(0);
+        useAudioStore.getState().setRawCurrentTime(0);
+      }
       setPlayingVersionId(versionId);
       setIsPlaying(true);
     }
@@ -125,7 +131,6 @@ export function TrackItem({ track, readOnly = false }: { track: any; readOnly?: 
   const totalDisplayDuration = maxDuration;
   const isCommentEnabled = track.is_comment_enabled === 1 || track.is_comment_enabled === true;
 
-  const isPlaylist = track.playback_mode === 'playlist';
   const currentPlayingVersion = versions.find((v: any) => v.id === playingVersionId);
 
   return (
@@ -220,11 +225,11 @@ export function TrackItem({ track, readOnly = false }: { track: any; readOnly?: 
             isPlayingTrack ? 'text-primary' : 'text-gray-500'
           }`}
         >
-          {/* 현재 재생 위치 (고주파 격리 컴포넌트) */}
-          <CurrentTimeText trackId={track.id} isPlaylist={isPlaylist} />
-          {/* 총 길이 (연속 재생 모드: 미재생 시 --:--, 재생 시 현재 곡 길이 / AB 모드: 최대 버전 기준) */}
+          {/* 현재 재생 위치 (고주파 격리 컴포넌트: 미재생 시 항상 00:00 표시) */}
+          <CurrentTimeText trackId={track.id} />
+          {/* 총 길이 (연속 재생 모드이면서 버전이 2개 이상일 때: 미재생 시 --:--, 재생 시 현재 곡 길이 / 단일 버전 또는 AB 모드: 해당/최대 버전 총 길이 원래대로 표시) */}
           <span>
-            {isPlaylist ? (
+            {isPlaylist && versions.length > 1 ? (
               isPlayingTrack && currentPlayingVersion ? (
                 formatTime(getVersionDuration(currentPlayingVersion))
               ) : (
@@ -370,34 +375,41 @@ function VersionProgressBar({
         </span>
       </div>
  
-      {/* 진행 배경 */}
-      {isPlayingTrack && (
-        <div
-          className={`absolute inset-0 ${isPlaying ? 'bg-primary/25' : 'bg-primary/20'} z-0`}
-          style={{ width: `${progressPercent}%` }}
-        />
-      )}
- 
-      {/* 재생선(Playhead) */}
-      {isPlayingTrack && versionDuration > 0 && (
-        <div
-          className="absolute top-0 bottom-0 w-[2px] bg-primary shadow-[0_0_8px_#f5a623] z-10 pointer-events-none"
-          style={{
-            left: `${progressPercent}%`,
-          }}
-        />
-      )}
- 
+      {/* 💡 진행 배경 & 재생선 (연속재생 모드는 오직 재생 중인 버전에만 노출) */}
+      {(() => {
+        const showProgress = isPlaylist ? (isCurrent && isPlayingTrack) : isPlayingTrack;
+        return (
+          <>
+            {showProgress && (
+              <div
+                className={`absolute inset-0 ${isPlaying ? 'bg-primary/25' : 'bg-primary/20'} z-0`}
+                style={{ width: `${progressPercent}%` }}
+              />
+            )}
+
+            {showProgress && versionDuration > 0 && (
+              <div
+                className="absolute top-0 bottom-0 w-[2px] bg-primary shadow-[0_0_8px_#f5a623] z-10 pointer-events-none"
+                style={{
+                  left: `${progressPercent}%`,
+                }}
+              />
+            )}
+          </>
+        );
+      })()}
+
       {/* 버퍼링 스트라이프 */}
       {!isReady && <div className="absolute inset-0 bg-stripes animate-pulse z-0" />}
- 
+
       {/* 파형 막대 시각화 */}
       {waveformBars.length > 0 && (() => {
+        const showProgress = isPlaylist ? (isCurrent && isPlayingTrack) : isPlayingTrack;
         const maxVal = Math.max(...waveformBars, 1);
         return (
           <div className="absolute inset-0 flex items-center px-0 z-[1] pointer-events-none" style={{ gap: '1px' }}>
             {waveformBars.map((val, i) => {
-              const isPassed = isPlayingTrack && ((i + 1) / waveformBars.length) * 100 <= progressPercent;
+              const isPassed = showProgress && ((i + 1) / waveformBars.length) * 100 <= progressPercent;
               
               let barColor = 'rgba(255, 255, 255, 0.12)'; // 기본 회색 (로드 안 됨 혹은 아직 안 지나간 구간)
               
@@ -472,7 +484,7 @@ function VersionProgressBar({
 /**
  * 재생경과 시간 격리 표시 컴포넌트
  */
-function CurrentTimeText({ trackId, isPlaylist = false }: { trackId: string; isPlaylist?: boolean }) {
+function CurrentTimeText({ trackId }: { trackId: string }) {
   const globalCurrentTime = useAudioStore(state => state.globalCurrentTime);
   const playingVersionId = useAudioStore(state => state.playingVersionId);
   const project = useProjectStore(state => state.project);
@@ -484,10 +496,6 @@ function CurrentTimeText({ trackId, isPlaylist = false }: { trackId: string; isP
   const isPlayingTrack = playingVersionId
     ? (track?.versions?.some((v: any) => v.id === playingVersionId) ?? false)
     : false;
-
-  if (isPlaylist && !isPlayingTrack) {
-    return <span>--:--</span>;
-  }
 
   return <span>{isPlayingTrack ? formatTime(globalCurrentTime) : '00:00'}</span>;
 }
