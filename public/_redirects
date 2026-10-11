@@ -1,3 +1,0 @@
-# Cloudflare Pages SPA & App Router Client Fallback Redirects
-/admin/*  /admin/index.html  200
-/*        /index.html        200
