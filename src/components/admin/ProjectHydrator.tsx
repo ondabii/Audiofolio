@@ -26,7 +26,7 @@ export function ProjectHydrator({ initialData, project, children, isAdmin = fals
           const queryUrl = isAdmin ? `/api/projects/${alias}?admin=true` : `/api/projects/${alias}`;
           const res = await fetch(queryUrl);
           if (res.ok) {
-            const remoteProject = await res.json();
+            const remoteProject = (await res.json()) as any;
             if (remoteProject && !remoteProject.error && remoteProject.title) {
               setProject(remoteProject);
               saveProjectToLocalStorage(remoteProject);

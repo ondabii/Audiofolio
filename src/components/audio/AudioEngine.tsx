@@ -2,6 +2,8 @@
 
 import { useEffect, useRef, useCallback } from 'react';
 import { useAudioStore } from '@/store/audioStore';
+import { useProjectStore } from '@/store/projectStore';
+import { getAudioContext as getGlobalAudioContext } from '@/lib/audioContext';
 
 export interface TrackVersion {
   id: string;
@@ -61,9 +63,7 @@ export function AudioEngine({ trackVersions = [] }: { trackVersions: TrackVersio
   // ─── 단일 AudioContext 초기화 ───
   const getAudioContext = useCallback(() => {
     if (!audioCtxRef.current) {
-      const AudioContextClass = window.AudioContext || (window as typeof window & { webkitAudioContext?: typeof AudioContext }).webkitAudioContext;
-      if (!AudioContextClass) throw new Error("Web Audio API not supported");
-      audioCtxRef.current = new AudioContextClass();
+      audioCtxRef.current = getGlobalAudioContext();
     }
     return audioCtxRef.current;
   }, []);
@@ -290,8 +290,8 @@ export function AudioEngine({ trackVersions = [] }: { trackVersions: TrackVersio
     // 해당 트랙의 재생 모드 판별 (연속 재생 vs AB 비교)
     const project = useProjectStore.getState().project;
     const currentTrack = project?.categories
-      .flatMap(c => c.tracks)
-      .find(t => t.id === targetVersion.track_id);
+      ?.flatMap((c: any) => c.tracks || [])
+      ?.find((t: any) => t.id === targetVersion.track_id);
     const isPlaylistMode = currentTrack?.playback_mode === 'playlist';
 
     const { buffer: targetBuf, loopStart: targetLoopStart, loopEnd: targetLoopEnd } = cachedTarget;
@@ -424,84 +424,75 @@ export function AudioEngine({ trackVersions = [] }: { trackVersions: TrackVersio
   }, [trackVersions, getAudioContext, stopAllSources, loadAudioBuffer, startSync, getMasterGain]);
 
   const currentTrackIdRef = useRef<string | null>(null);
+  const currentVersionIdRef = useRef<string | null>(null);
   const pauseTimeRef = useRef<number>(0);
   const pauseTrackIdRef = useRef<string | null>(null);
 
-  // ─── playingVersionId 변경 처리 (0ms 크로스페이드 AB 스위칭) ───
+  // ─── 통합 재생 / 일시정지 / 버전 전환 처리 (경합 조건 원천 차단) ───
   useEffect(() => {
-    if (!playingVersionId) {
-      stopAllSources();
-      isPlayingRef.current = false;
+    // 1. 일시정지 상태이거나 playingVersionId가 없는 경우
+    if (!isPlaying || !playingVersionId) {
+      if (isPlayingRef.current) {
+        const store = useAudioStore.getState();
+        const currentVersion = trackVersions.find(v => v.id === currentVersionIdRef.current);
+        pauseTimeRef.current = store.rawCurrentTime;
+        pauseTrackIdRef.current = currentVersion?.track_id || null;
+        stopAllSources();
+        isPlayingRef.current = false;
+      }
       return;
     }
 
+    // 2. 재생 요청 (isPlaying === true && playingVersionId 존재)
     const targetVersion = trackVersions.find(v => v.id === playingVersionId);
-    const targetTrackId = targetVersion?.track_id || null;
+    if (!targetVersion) return;
+
+    const targetTrackId = targetVersion.track_id;
     const isSameTrack = currentTrackIdRef.current !== null && currentTrackIdRef.current === targetTrackId;
+    const isSameVersion = currentVersionIdRef.current === playingVersionId;
 
     if (!isSameTrack) {
-      // 💡 완전히 다른 트랙으로 전환되는 것이므로 재생 경과 시간 및 일시정지 기억을 0초로 완전 리셋!
+      // 다른 트랙으로 변경 시 시간 리셋
       currentTrackIdRef.current = targetTrackId;
+      currentVersionIdRef.current = playingVersionId;
       pauseTimeRef.current = 0;
       pauseTrackIdRef.current = null;
       setGlobalCurrentTime(0);
       setRawCurrentTime(0);
-
-      // 로컬 재생 타이머 루프를 즉각 멈춰 동기 대기 시킵니다.
       stopAllSources();
       isPlayingRef.current = false;
+
+      startSinglePlay(playingVersionId, 0).catch(e => console.error("재생 시작 실패:", e));
+      return;
     }
 
-    if (isPlaying) {
-      const targetTime = isSameTrack ? useAudioStore.getState().rawCurrentTime : 0;
-      pauseTimeRef.current = 0;
-      pauseTrackIdRef.current = null;
-      startSinglePlay(playingVersionId, targetTime).catch(e => console.error(e));
-    } else {
-      if (targetVersion) {
-        loadAudioBuffer(targetVersion).catch(e => console.error(e));
-      }
+    // 같은 트랙 내에서
+    if (isPlayingRef.current && isSameVersion) {
+      // 이미 이 버전이 재생 중인 상태라면 재시작 불필요
+      return;
     }
-  }, [playingVersionId, trackVersions, isPlaying, startSinglePlay, loadAudioBuffer, stopAllSources, setGlobalCurrentTime, setRawCurrentTime]);
 
-  // ─── isPlaying 변경 처리 ───
-  useEffect(() => {
-    if (isPlaying) {
-      if (!isPlayingRef.current && playingVersionId) {
-        const targetVersion = trackVersions.find(v => v.id === playingVersionId);
-        const targetTrackId = targetVersion?.track_id || null;
-        const isSameTrackAsPaused = pauseTrackIdRef.current !== null && pauseTrackIdRef.current === targetTrackId;
+    // 일시정지 상태에서 재개(Resume)하거나, 같은 트랙의 다른 버전으로 AB 스위칭하는 경우
+    const isSameTrackAsPaused = pauseTrackIdRef.current !== null && pauseTrackIdRef.current === targetTrackId;
+    const store = useAudioStore.getState();
+    const resumeTime = isSameTrackAsPaused && pauseTimeRef.current > 0
+      ? pauseTimeRef.current
+      : store.rawCurrentTime;
 
-        const store = useAudioStore.getState();
-        // 💡 같은 트랙일 때만 pauseTime을 이어서 재생하고, 다른 트랙이면 0초부터 시작!
-        const resumeTime = isSameTrackAsPaused && pauseTimeRef.current > 0 
-          ? pauseTimeRef.current 
-          : (isSameTrackAsPaused ? store.rawCurrentTime : 0);
+    pauseTimeRef.current = 0;
+    pauseTrackIdRef.current = null;
+    currentVersionIdRef.current = playingVersionId;
 
-        pauseTimeRef.current = 0;
-        pauseTrackIdRef.current = null;
-        currentTrackIdRef.current = targetTrackId;
-
-        startSinglePlay(playingVersionId, resumeTime);
-      }
-    } else {
-      // 💡 일시정지 시 현재 트랙 ID와 시각을 보존
-      const store = useAudioStore.getState();
-      const currentVersion = trackVersions.find(v => v.id === playingVersionId);
-      pauseTimeRef.current = store.rawCurrentTime;
-      pauseTrackIdRef.current = currentVersion?.track_id || null;
-      stopAllSources();
-      isPlayingRef.current = false;
-    }
-  }, [isPlaying, playingVersionId, trackVersions, startSinglePlay, stopAllSources]);
+    startSinglePlay(playingVersionId, resumeTime).catch(e => console.error("재생 시작 실패:", e));
+  }, [playingVersionId, isPlaying, trackVersions, startSinglePlay, stopAllSources, setGlobalCurrentTime, setRawCurrentTime]);
 
   // ─── Seek 처리 ───
   useEffect(() => {
     if (seekRequestTime === null) return;
     pauseTimeRef.current = 0;
     pauseTrackIdRef.current = null;
-    if (isPlaying) {
-      startSinglePlay(playingVersionId, seekRequestTime);
+    if (isPlaying && playingVersionId) {
+      startSinglePlay(playingVersionId, seekRequestTime).catch(e => console.error("Seek 실패:", e));
     } else {
       setGlobalCurrentTime(seekRequestTime);
       setRawCurrentTime(seekRequestTime);

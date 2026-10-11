@@ -93,7 +93,7 @@ export function AdminTrackDetail({ track, projectId }: AdminTrackDetailProps) {
     if (currentProject) {
       const updatedCats = currentProject.categories.map(cat => ({
         ...cat,
-        tracks: cat.tracks.map(t => t.id === track.id ? { ...t, is_downloadable: nextVal ? 1 : 0 } : t)
+        tracks: cat.tracks.map(t => t.id === track.id ? { ...t, is_downloadable: Boolean(nextVal) } : t)
       }));
       useProjectStore.getState().setProject({ ...currentProject, categories: updatedCats });
     }

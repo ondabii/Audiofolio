@@ -77,7 +77,7 @@ export function TrackComments({ trackId, isAdmin = false }: TrackCommentsProps) 
       const url = `/api/comments?track_id=${trackId}${isAdmin ? '&admin=true' : ''}`;
       const res = await fetch(url);
       if (res.ok) {
-        const data = await res.json();
+        const data = (await res.json()) as any;
         if (data.comments) {
           setComments(data.comments);
         }
@@ -112,7 +112,7 @@ export function TrackComments({ trackId, isAdmin = false }: TrackCommentsProps) 
       });
 
       if (res.ok) {
-        const data = await res.json();
+        const data = (await res.json()) as any;
         if (data.comment) {
           setComments(prev => [...prev, data.comment]);
           setContent('');
@@ -140,36 +140,9 @@ export function TrackComments({ trackId, isAdmin = false }: TrackCommentsProps) 
 
   return (
     <div className="pt-3 mt-2 border-t border-[#1c2126]">
-      {/* ── 입력칸 ── */}
-      <form onSubmit={handleSubmit} className="flex gap-2 mb-3">
-        <input
-          type="text"
-          value={authorName}
-          onChange={e => setAuthorName(e.target.value)}
-          placeholder="이름"
-          className="w-28 sm:w-36 bg-[#161a1d] text-xs text-white border border-[#262b30] rounded px-2.5 py-1.5 outline-none focus:border-primary"
-          required
-        />
-        <input
-          type="text"
-          value={content}
-          onChange={e => setContent(e.target.value)}
-          placeholder="댓글"
-          className="flex-1 bg-[#161a1d] text-xs text-white border border-[#262b30] rounded px-3 py-1.5 outline-none focus:border-primary"
-          required
-        />
-        <button
-          type="submit"
-          disabled={isSubmitting}
-          className="px-3.5 py-1.5 bg-primary hover:bg-primary/90 text-black font-bold text-xs rounded transition-colors shrink-0 disabled:opacity-50 cursor-pointer"
-        >
-          작성
-        </button>
-      </form>
-
-      {/* ── 작성 내역 ── */}
+      {/* ── 작성 내역 (상단 배치) ── */}
       {comments.length > 0 && (
-        <div className="space-y-2">
+        <div className="space-y-2 mb-3">
           {comments.map(c => (
             <div key={c.id} className="py-1.5 border-b border-[#1c2126]/60 text-xs">
               <div className="flex items-center justify-between mb-0.5">
@@ -206,6 +179,33 @@ export function TrackComments({ trackId, isAdmin = false }: TrackCommentsProps) 
           ))}
         </div>
       )}
+
+      {/* ── 입력칸 (하단 배치) ── */}
+      <form onSubmit={handleSubmit} className="flex gap-2">
+        <input
+          type="text"
+          value={authorName}
+          onChange={e => setAuthorName(e.target.value)}
+          placeholder="이름"
+          className="w-28 sm:w-36 bg-[#161a1d] text-xs text-white border border-[#262b30] rounded px-2.5 py-1.5 outline-none focus:border-primary"
+          required
+        />
+        <input
+          type="text"
+          value={content}
+          onChange={e => setContent(e.target.value)}
+          placeholder="댓글"
+          className="flex-1 bg-[#161a1d] text-xs text-white border border-[#262b30] rounded px-3 py-1.5 outline-none focus:border-primary"
+          required
+        />
+        <button
+          type="submit"
+          disabled={isSubmitting}
+          className="px-3.5 py-1.5 bg-primary hover:bg-primary/90 text-black font-bold text-xs rounded transition-colors shrink-0 disabled:opacity-50 cursor-pointer"
+        >
+          작성
+        </button>
+      </form>
     </div>
   );
 }

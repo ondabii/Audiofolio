@@ -30,7 +30,7 @@ export function EmbedTrackClient({ initialData }: EmbedTrackClientProps) {
             project_id: project.id || 'embed-project',
             title: 'General',
             order_index: 0,
-            tracks: [track]
+            tracks: [track as any]
           }
         ]
       });
@@ -43,7 +43,7 @@ export function EmbedTrackClient({ initialData }: EmbedTrackClientProps) {
   return (
     <div className="w-full min-h-screen bg-[#111416] text-white flex flex-col justify-center px-3 py-3 select-none antialiased">
       {/* 1. 단일 트랙 오디오 엔진 (오토플레이 없음, 클릭 시에만 재생) */}
-      <AudioEngine trackVersions={track.versions || []} />
+      <AudioEngine trackVersions={(track.versions || []) as any} />
 
       {/* 2. 임베드 헤더: 프로젝트 출처 & 로고 링크 */}
       <div className="flex items-center justify-between mb-2 pb-2 border-b border-[#22272c]/80">

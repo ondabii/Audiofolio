@@ -6,6 +6,7 @@ import { useAudioStore } from '@/store/audioStore';
 import { useProjectStore } from '@/store/projectStore';
 import { InlineEditor } from '@/components/admin/InlineEditor';
 import { TrackComments } from '@/components/audio/TrackComments';
+import { initAudioContext } from '@/lib/audioContext';
 
 export function TrackItem({ track, readOnly = false }: { track: any; readOnly?: boolean }) {
   const playingVersionId = useAudioStore(state => state.playingVersionId);
@@ -74,6 +75,7 @@ export function TrackItem({ track, readOnly = false }: { track: any; readOnly?: 
 
   // 버전 재생/정지 토글
   const handlePlayToggle = (versionId: string) => {
+    initAudioContext();
     if (playingVersionId === versionId) {
       setIsPlaying(!isPlaying);
     } else {
@@ -123,6 +125,9 @@ export function TrackItem({ track, readOnly = false }: { track: any; readOnly?: 
   const totalDisplayDuration = maxDuration;
   const isCommentEnabled = track.is_comment_enabled === 1 || track.is_comment_enabled === true;
 
+  const isPlaylist = track.playback_mode === 'playlist';
+  const currentPlayingVersion = versions.find((v: any) => v.id === playingVersionId);
+
   return (
     <div id={`track-${track.id}`} className="mb-16 pt-4">
       {/* 트랙 제목 */}
@@ -145,7 +150,9 @@ export function TrackItem({ track, readOnly = false }: { track: any; readOnly?: 
           // 버퍼 준비 여부: 이 트랙이 재생 중일 때만 로딩 상태 표시
           const isReady = isPlayingTrack && vState ? vState.isReady : true;
           const versionDuration = getVersionDuration(version);
-          const rowHeight = isRep ? 'h-16' : 'h-10';
+          const rowHeight = isPlaylist || isRep ? 'h-16' : 'h-10';
+          const showPause = isCurrent && isPlaying;
+          const showPlayAsRep = isPlaylist || isRep;
 
           return (
             <div key={version.id} className="flex flex-col">
@@ -165,13 +172,13 @@ export function TrackItem({ track, readOnly = false }: { track: any; readOnly?: 
                     <button
                       onClick={() => handlePlayToggle(version.id)}
                       className={`${
-                        isCurrent || isRep ? 'text-primary hover:text-primary/80' : 'text-gray-600 hover:text-primary'
+                        isCurrent || showPlayAsRep ? 'text-primary hover:text-primary/80' : 'text-gray-600 hover:text-primary'
                       } transition-colors flex items-center justify-center w-full h-full`}
-                      aria-label={isCurrent && isPlaying ? '일시정지' : isRep ? '재생' : 'Solo'}
+                      aria-label={showPause ? '일시정지' : showPlayAsRep ? '재생' : 'Solo'}
                     >
-                      {isCurrent && isPlaying ? (
-                        <Pause className={isRep ? 'w-6 h-6 fill-primary' : 'w-[18px] h-[18px]'} />
-                      ) : isRep ? (
+                      {showPause ? (
+                        <Pause className={showPlayAsRep ? 'w-6 h-6 fill-primary' : 'w-[18px] h-[18px]'} />
+                      ) : showPlayAsRep ? (
                         <Play className="w-6 h-6 fill-primary" />
                       ) : (
                         <Headphones className="w-[18px] h-[18px]" />
@@ -189,6 +196,7 @@ export function TrackItem({ track, readOnly = false }: { track: any; readOnly?: 
                     versionDuration={versionDuration}
                     isReady={isReady}
                     isRep={isRep}
+                    isPlaylist={isPlaylist}
                     isDownloadable={isDownloadable}
                     onDownload={handleDownloadVersion}
                   />
@@ -213,9 +221,19 @@ export function TrackItem({ track, readOnly = false }: { track: any; readOnly?: 
           }`}
         >
           {/* 현재 재생 위치 (고주파 격리 컴포넌트) */}
-          <CurrentTimeText trackId={track.id} />
-          {/* 총 길이 (최대 버전 기준) */}
-          <span>{totalDisplayDuration > 0 ? formatTime(totalDisplayDuration) : '00:00'}</span>
+          <CurrentTimeText trackId={track.id} isPlaylist={isPlaylist} />
+          {/* 총 길이 (연속 재생 모드: 미재생 시 --:--, 재생 시 현재 곡 길이 / AB 모드: 최대 버전 기준) */}
+          <span>
+            {isPlaylist ? (
+              isPlayingTrack && currentPlayingVersion ? (
+                formatTime(getVersionDuration(currentPlayingVersion))
+              ) : (
+                '--:--'
+              )
+            ) : (
+              totalDisplayDuration > 0 ? formatTime(totalDisplayDuration) : '00:00'
+            )}
+          </span>
         </div>
       </div>
 
@@ -241,6 +259,7 @@ function VersionProgressBar({
   versionDuration,
   isReady,
   isRep,
+  isPlaylist = false,
   isDownloadable,
   onDownload,
 }: {
@@ -250,6 +269,7 @@ function VersionProgressBar({
   versionDuration: number;
   isReady: boolean;
   isRep: boolean;
+  isPlaylist?: boolean;
   isDownloadable: boolean;
   onDownload: (v: any) => void;
 }) {
@@ -279,11 +299,12 @@ function VersionProgressBar({
     }
   }, [version, version.id]);
  
-  // 스펙트럼 너비 비율
-  const spectrumWidthPercent =
-    maxDuration > 0 && versionDuration > 0
-      ? Math.min((versionDuration / maxDuration) * 100, 100)
-      : 100;
+  // 스펙트럼 너비 비율 (연속 재생 모드일 때는 모든 버전이 100% 꽉 채움)
+  const spectrumWidthPercent = isPlaylist
+    ? 100
+    : (maxDuration > 0 && versionDuration > 0
+        ? Math.min((versionDuration / maxDuration) * 100, 100)
+        : 100);
  
   // 재생 진행 퍼센트 (누적 시간 rawCurrentTime 기준 오차 없는 모듈로 연산 적용, 일시정지 시에도 위치 유지)
   let progressPercent = 0;
@@ -318,6 +339,7 @@ function VersionProgressBar({
       style={{ width: `${spectrumWidthPercent}%` }}
       onClick={e => {
         if (!isReady) return;
+        initAudioContext();
         const rect = e.currentTarget.getBoundingClientRect();
         const x = e.clientX - rect.left;
         const percent = x / rect.width;
@@ -341,7 +363,7 @@ function VersionProgressBar({
       <div className="absolute left-2.5 top-1.5 z-10 pointer-events-none select-none max-w-[75%]">
         <span
           className={`bg-black/50 border-gray-700/50 text-[10px] px-2 py-0.5 rounded border backdrop-blur-sm truncate inline-block ${
-            isRep ? 'font-bold text-primary border-primary/30' : 'font-medium text-gray-400'
+            isRep || isPlaylist ? 'font-bold text-primary border-primary/30' : 'font-medium text-gray-400'
           }`}
         >
           {version.title || `v${version.order_index}`}
@@ -450,18 +472,22 @@ function VersionProgressBar({
 /**
  * 재생경과 시간 격리 표시 컴포넌트
  */
-function CurrentTimeText({ trackId }: { trackId: string }) {
+function CurrentTimeText({ trackId, isPlaylist = false }: { trackId: string; isPlaylist?: boolean }) {
   const globalCurrentTime = useAudioStore(state => state.globalCurrentTime);
   const playingVersionId = useAudioStore(state => state.playingVersionId);
   const project = useProjectStore(state => state.project);
 
   const track = project?.categories
-    .flatMap(c => c.tracks)
-    .find(t => t.id === trackId);
+    ?.flatMap((c: any) => c.tracks || [])
+    ?.find((t: any) => t.id === trackId);
 
   const isPlayingTrack = playingVersionId
     ? (track?.versions?.some((v: any) => v.id === playingVersionId) ?? false)
     : false;
+
+  if (isPlaylist && !isPlayingTrack) {
+    return <span>--:--</span>;
+  }
 
   return <span>{isPlayingTrack ? formatTime(globalCurrentTime) : '00:00'}</span>;
 }

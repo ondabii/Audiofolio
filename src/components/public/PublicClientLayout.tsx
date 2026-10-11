@@ -5,7 +5,6 @@ import { Sidebar } from '@/components/layout/Sidebar';
 import { TrackItem } from '@/components/audio/TrackItem';
 import { AudioEngine } from '@/components/audio/AudioEngine';
 import { BottomBarPlayer } from '@/components/audio/BottomBarPlayer';
-import { OfflineDownloadBanner } from '@/components/audio/OfflineDownloadBanner';
 import { Lock } from 'lucide-react';
 
 import { useRef } from 'react';
@@ -33,7 +32,7 @@ export function PublicClientLayout() {
       onWheel={handleOuterWheel}
       className="w-full h-full flex bg-[#111416] overflow-hidden justify-center relative pl-0 lg:pl-64 touch-pan-y"
     >
-      <AudioEngine trackVersions={allVersions} />
+      <AudioEngine trackVersions={allVersions as any} />
       <BottomBarPlayer />
 
       <Sidebar projectTitle={project.title} categories={project.categories} />

@@ -8,6 +8,7 @@ export interface VersionData {
   public_url: string;
   is_representative: boolean;
   is_visible: boolean;
+  is_normalized?: boolean;
   duration_ms?: number;
   file_format?: string;
   bitrate?: number;

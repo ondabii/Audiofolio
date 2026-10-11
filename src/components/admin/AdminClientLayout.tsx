@@ -224,7 +224,7 @@ export function AdminClientLayout({ projects }: { projects: any[] }) {
 
   return (
     <div className="min-h-screen lg:h-screen w-screen overflow-y-auto lg:overflow-hidden antialiased flex flex-col bg-[#111416] touch-pan-y">
-      <AudioEngine trackVersions={allVersions} />
+      <AudioEngine trackVersions={allVersions as any} />
       <BottomBarPlayer />
       
       {/* Global Top Header */}
