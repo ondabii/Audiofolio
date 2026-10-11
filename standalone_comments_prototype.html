@@ -1,0 +1,229 @@
+<!DOCTYPE html>
+<html lang="ko">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <title>Audiofolio - 댓글 활성화/비활성화 토글 & 독립 댓글 영역</title>
+  <script src="https://cdn.tailwindcss.com"></script>
+  <style>
+    body {
+      background-color: #111416;
+      color: #e5e7eb;
+      font-family: system-ui, -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, sans-serif;
+    }
+    .text-primary { color: #f5a623; }
+    .bg-primary { background-color: #f5a623; }
+    .border-primary { border-color: #f5a623; }
+    .comment-link {
+      color: #f5a623;
+      text-decoration: underline;
+      text-underline-offset: 3px;
+      word-break: break-all;
+    }
+    .comment-link:hover {
+      opacity: 0.8;
+    }
+  </style>
+</head>
+<body class="p-4 sm:p-8 max-w-4xl mx-auto min-h-screen">
+
+  <!-- 뷰 모드 토글 (어드민 뷰 vs 일반 방문자 뷰 확인용) -->
+  <div class="mb-8 flex items-center justify-between text-xs text-gray-500 border-b border-[#22272c] pb-3">
+    <div class="flex items-center gap-2">
+      <span class="w-2 h-2 rounded-full bg-emerald-500 animate-pulse"></span>
+      <span class="font-bold text-gray-400">Audiofolio Preview</span>
+    </div>
+    <button id="viewToggleBtn" onclick="toggleAdminView()" class="px-2.5 py-1 rounded text-xs font-bold bg-[#1c2126] text-primary border border-primary/30 hover:bg-primary hover:text-black transition-colors cursor-pointer">
+      현재: 어드민 뷰 (토글 설정 및 추가 버튼 표시)
+    </button>
+  </div>
+
+  <!-- 카테고리 헤더 & 어드민 추가 버튼들 -->
+  <div class="flex items-center justify-between mb-8 pb-2 border-b border-[#22272c]">
+    <h2 class="text-xl font-bold text-primary">Commercial BGM</h2>
+
+    <!-- 어드민 전용: 트랙 추가 & 댓글 영역 추가 버튼 -->
+    <div class="admin-only flex items-center gap-2">
+      <button class="px-3 py-1.5 rounded text-xs font-bold bg-[#1c2126] text-gray-300 hover:text-white border border-[#262b30] hover:border-primary transition-colors cursor-pointer">
+        + 트랙 추가
+      </button>
+      <button class="px-3 py-1.5 rounded text-xs font-bold bg-primary/10 text-primary border border-primary/30 hover:bg-primary hover:text-black transition-colors cursor-pointer">
+        + 댓글 영역 추가
+      </button>
+    </div>
+  </div>
+
+
+  <!-- ── 1. 트랙 A: 댓글이 '비활성화(차단)'된 트랙 (댓글 영역 아예 없음) ── -->
+  <div class="mb-12 pb-6 border-b border-[#22272c]">
+    <div class="flex items-center justify-between mb-3">
+      <h3 class="text-lg font-bold text-white">01. Synth Wave Anthem</h3>
+
+      <!-- 어드민 전용 토글 버튼: 댓글 차단 상태 -->
+      <div class="admin-only flex items-center gap-2">
+        <button class="px-2.5 py-1 rounded text-[11px] font-bold bg-[#1c2126] text-gray-500 border border-gray-800">
+          댓글 차단됨
+        </button>
+      </div>
+    </div>
+
+    <!-- 스펙트럼 플레이어 (기존 디자인 100% 동일) -->
+    <div class="grid grid-cols-[2rem_1fr] lg:grid-cols-[2.5rem_1fr] gap-x-2 lg:gap-x-3 h-14 items-center">
+      <div class="flex justify-center items-center h-full">
+        <button class="text-primary hover:text-primary/80 transition-colors flex items-center justify-center w-full h-full">
+          <svg class="w-6 h-6 fill-primary" viewBox="0 0 24 24"><polygon points="5 3 19 12 5 21 5 3"/></svg>
+        </button>
+      </div>
+      <div class="h-full relative overflow-hidden bg-[#1c2126] hover:bg-[#252b31] cursor-pointer" style="width: 100%;">
+        <div class="absolute left-2.5 top-1.5 z-10 pointer-events-none select-none max-w-[75%]">
+          <span class="bg-black/50 border border-primary/30 text-[10px] px-2 py-0.5 rounded backdrop-blur-sm text-primary font-bold truncate inline-block">
+            v1. Master Mix
+          </span>
+        </div>
+        <div class="absolute inset-0 flex items-center px-0 z-[1] pointer-events-none gap-[1px]">
+          <div class="flex-1 bg-white/10 h-[30%] rounded-full"></div>
+          <div class="flex-1 bg-white/10 h-[70%] rounded-full"></div>
+          <div class="flex-1 bg-white/10 h-[90%] rounded-full"></div>
+          <div class="flex-1 bg-white/10 h-[50%] rounded-full"></div>
+          <div class="flex-1 bg-white/10 h-[80%] rounded-full"></div>
+        </div>
+        <div class="absolute right-1 bottom-1 flex gap-1.5 z-10 items-center">
+          <span class="bg-black/50 text-gray-400 border border-gray-700/50 text-[9px] font-bold px-1.5 py-0.5 rounded uppercase">WAV</span>
+        </div>
+      </div>
+    </div>
+    <div class="grid grid-cols-[2rem_1fr] lg:grid-cols-[2.5rem_1fr] gap-x-2 lg:gap-x-3 mt-1.5">
+      <div></div>
+      <div class="flex justify-between text-[11px] lg:text-xs font-semibold px-1 text-gray-500">
+        <span>00:00</span>
+        <span>03:20</span>
+      </div>
+    </div>
+    <!-- 💡 댓글이 비활성화되어 있으므로 댓글 영역이 전혀 나타나지 않음 -->
+  </div>
+
+
+  <!-- ── 2. 트랙 B: 댓글이 '활성화(허용)'된 트랙 (댓글 영역 노출) ── -->
+  <div class="mb-14 pb-6 border-b border-[#22272c]">
+    <div class="flex items-center justify-between mb-3">
+      <h3 class="text-lg font-bold text-white">02. Cyberpunk Chase</h3>
+
+      <!-- 어드민 전용 토글 버튼: 댓글 허용 상태 -->
+      <div class="admin-only flex items-center gap-2">
+        <button class="px-2.5 py-1 rounded text-[11px] font-bold bg-[#f5a623]/10 text-[#f5a623] border border-[#f5a623]/30">
+          댓글 허용됨
+        </button>
+      </div>
+    </div>
+
+    <!-- 스펙트럼 플레이어 -->
+    <div class="grid grid-cols-[2rem_1fr] lg:grid-cols-[2.5rem_1fr] gap-x-2 lg:gap-x-3 h-14 items-center">
+      <div class="flex justify-center items-center h-full">
+        <button class="text-primary hover:text-primary/80 transition-colors flex items-center justify-center w-full h-full">
+          <svg class="w-6 h-6 fill-primary" viewBox="0 0 24 24"><polygon points="5 3 19 12 5 21 5 3"/></svg>
+        </button>
+      </div>
+      <div class="h-full relative overflow-hidden bg-[#1c2126] hover:bg-[#252b31] cursor-pointer" style="width: 100%;">
+        <div class="absolute left-2.5 top-1.5 z-10 pointer-events-none select-none max-w-[75%]">
+          <span class="bg-black/50 border border-primary/30 text-[10px] px-2 py-0.5 rounded backdrop-blur-sm text-primary font-bold truncate inline-block">
+            v1. Final
+          </span>
+        </div>
+        <div class="absolute inset-0 flex items-center px-0 z-[1] pointer-events-none gap-[1px]">
+          <div class="flex-1 bg-white/10 h-[40%] rounded-full"></div>
+          <div class="flex-1 bg-white/10 h-[60%] rounded-full"></div>
+          <div class="flex-1 bg-white/10 h-[85%] rounded-full"></div>
+          <div class="flex-1 bg-white/10 h-[45%] rounded-full"></div>
+        </div>
+        <div class="absolute right-1 bottom-1 flex gap-1.5 z-10 items-center">
+          <span class="bg-black/50 text-gray-400 border border-gray-700/50 text-[9px] font-bold px-1.5 py-0.5 rounded uppercase">WAV</span>
+        </div>
+      </div>
+    </div>
+    <div class="grid grid-cols-[2rem_1fr] lg:grid-cols-[2.5rem_1fr] gap-x-2 lg:gap-x-3 mt-1.5">
+      <div></div>
+      <div class="flex justify-between text-[11px] lg:text-xs font-semibold px-1 text-gray-500">
+        <span>00:00</span>
+        <span>02:45</span>
+      </div>
+    </div>
+
+    <!-- 💡 댓글이 활성화된 트랙에만 표시되는 미니멀 댓글 영역 -->
+    <div class="pt-3 mt-3 border-t border-[#1c2126]">
+      <div class="flex gap-2 mb-2">
+        <input type="text" placeholder="이름" value="방문자" class="w-28 sm:w-36 bg-[#161a1d] text-xs text-white border border-[#262b30] rounded px-2.5 py-1.5 outline-none focus:border-primary" />
+        <input type="text" placeholder="댓글" class="flex-1 bg-[#161a1d] text-xs text-white border border-[#262b30] rounded px-3 py-1.5 outline-none focus:border-primary" />
+        <button class="px-3.5 py-1.5 bg-primary text-black font-bold text-xs rounded shrink-0">작성</button>
+      </div>
+      <div class="space-y-1.5">
+        <div class="py-1 border-b border-[#1c2126]/60 text-xs">
+          <div class="flex items-center justify-between mb-0.5">
+            <div class="flex items-center gap-2">
+              <span class="font-bold text-white">Ondabii</span>
+              <span class="text-[10px] font-bold px-1.5 py-0.2 rounded bg-primary/20 text-primary border border-primary/30">작성자</span>
+              <span class="text-[11px] text-gray-500">2026-10-11 11:05</span>
+              <span class="admin-only text-[10px] text-gray-500 font-mono">211.234.12.89</span>
+            </div>
+            <button class="admin-only text-[11px] text-gray-500 hover:text-red-400">삭제</button>
+          </div>
+          <div class="text-gray-300 leading-relaxed pl-0.5">사운드 믹스 의견 환영합니다.</div>
+        </div>
+      </div>
+    </div>
+  </div>
+
+
+  <!-- ── 3. 트랙 없이 독립적으로 추가된 댓글 영역 (순수 댓글 블록) ── -->
+  <div class="mb-14 p-5 bg-[#14171a] border border-[#22272c] rounded-xl">
+    <div class="flex items-center justify-between mb-3 pb-2 border-b border-[#22272c]">
+      <div class="flex items-center gap-2">
+        <h3 class="text-base font-bold text-white">자유 피드백 & 방명록</h3>
+        <span class="text-[11px] text-gray-500 font-medium">(트랙 없는 독립 댓글 영역)</span>
+      </div>
+      <button class="admin-only text-xs text-red-500/80 hover:text-red-400 px-2 py-0.5 rounded bg-red-500/10 border border-red-500/20">
+        삭제
+      </button>
+    </div>
+
+    <!-- 입력칸 및 작성 내역 -->
+    <div class="flex gap-2 mb-3">
+      <input type="text" placeholder="이름" value="Ondabii" class="w-28 sm:w-36 bg-[#161a1d] text-xs text-white border border-[#262b30] rounded px-2.5 py-1.5 outline-none focus:border-primary" />
+      <input type="text" placeholder="댓글을 입력하세요..." class="flex-1 bg-[#161a1d] text-xs text-white border border-[#262b30] rounded px-3 py-1.5 outline-none focus:border-primary" />
+      <button class="px-4 py-1.5 bg-primary text-black font-bold text-xs rounded shrink-0">작성</button>
+    </div>
+    <div class="space-y-1.5">
+      <div class="py-1 border-b border-[#1c2126]/60 text-xs">
+        <div class="flex items-center justify-between mb-0.5">
+          <div class="flex items-center gap-2">
+            <span class="font-bold text-white">Ondabii</span>
+            <span class="text-[10px] font-bold px-1.5 py-0.2 rounded bg-primary/20 text-primary border border-primary/30">작성자</span>
+            <span class="text-[11px] text-gray-500">2026-10-11 12:40</span>
+            <span class="admin-only text-[10px] text-gray-500 font-mono">211.234.12.89</span>
+          </div>
+          <button class="admin-only text-[11px] text-gray-500 hover:text-red-400">삭제</button>
+        </div>
+        <div class="text-gray-300 leading-relaxed pl-0.5">자유롭게 방명록을 남겨주세요.</div>
+      </div>
+    </div>
+  </div>
+
+  <script>
+    let isAdmin = true;
+    function toggleAdminView() {
+      isAdmin = !isAdmin;
+      const adminElements = document.querySelectorAll('.admin-only');
+      adminElements.forEach(el => {
+        el.style.display = isAdmin ? '' : 'none';
+      });
+
+      const btn = document.getElementById('viewToggleBtn');
+      if (isAdmin) {
+        btn.textContent = '현재: 어드민 뷰 (토글 설정 및 추가 버튼 표시)';
+      } else {
+        btn.textContent = '현재: 일반 방문자 뷰 (토글 버튼 숨김)';
+      }
+    }
+  </script>
+
+</body>
+</html>

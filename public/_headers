@@ -1,0 +1,6 @@
+/embed/*
+  Content-Security-Policy: frame-ancestors *
+  Access-Control-Allow-Origin: *
+
+/api/*
+  Access-Control-Allow-Origin: *
