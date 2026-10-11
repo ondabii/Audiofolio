@@ -84,14 +84,16 @@ export function AudioEngine({ trackVersions = [] }: { trackVersions: TrackVersio
     cancelAnimationFrame(rafRef.current);
   }, []);
 
-  const startSync = useCallback((maxDuration: number) => {
+  const startSync = useCallback((maxDuration: number, isPlaylistMode: boolean = false) => {
     stopSync();
     const tick = () => {
       const ctx = audioCtxRef.current;
       if (ctx && isPlayingRef.current && maxDuration > 0) {
         const elapsed = ctx.currentTime - startTimeRef.current;
         const currentRaw = elapsed + startOffsetRef.current;
-        const current = currentRaw % maxDuration;
+        const current = isPlaylistMode
+          ? Math.min(currentRaw, maxDuration)
+          : (currentRaw % maxDuration);
         setGlobalCurrentTime(current);
         setRawCurrentTime(currentRaw);
       }
@@ -285,15 +287,26 @@ export function AudioEngine({ trackVersions = [] }: { trackVersions: TrackVersio
       return;
     }
 
-    const { buffer: targetBuf, loopStart: targetLoopStart, loopEnd: targetLoopEnd } = cachedTarget;
-    const targetDuration = targetLoopEnd - targetLoopStart;
+    // 해당 트랙의 재생 모드 판별 (연속 재생 vs AB 비교)
+    const project = useProjectStore.getState().project;
+    const currentTrack = project?.categories
+      .flatMap(c => c.tracks)
+      .find(t => t.id === targetVersion.track_id);
+    const isPlaylistMode = currentTrack?.playback_mode === 'playlist';
 
-    // 미리 전체 최대 길이 산출 (트리밍된 duration 기준)
+    const { buffer: targetBuf, loopStart: targetLoopStart, loopEnd: targetLoopEnd } = cachedTarget;
+    
+    // 💡 플레이리스트 모드일 때는 트림 없이 원본 전체 길이(0 ~ duration)를 그대로 사용
+    const effectiveLoopStart = isPlaylistMode ? 0 : targetLoopStart;
+    const effectiveLoopEnd = isPlaylistMode ? targetBuf.duration : targetLoopEnd;
+    const targetDuration = effectiveLoopEnd - effectiveLoopStart;
+
+    // 미리 전체 최대 길이 산출 (AB 모드일 때만 최대 길이 기준, 플레이리스트 모드는 해당 곡 길이 기준)
     let maxDuration = siblingVersions.reduce((max, v) => {
       const vDur = v.duration_ms > 0 ? v.duration_ms / 1000 : 0;
       return Math.max(max, vDur);
     }, 0);
-    if (maxDuration === 0) {
+    if (maxDuration === 0 || isPlaylistMode) {
       maxDuration = targetDuration;
     }
 
@@ -340,9 +353,29 @@ export function AudioEngine({ trackVersions = [] }: { trackVersions: TrackVersio
     // 3. 신규 활성 음원 재생 기동 (오직 1개의 음원만 믹싱 스레드에서 돌아가도록 고안됨)
     const targetSource = ctx.createBufferSource();
     targetSource.buffer = targetBuf;
-    targetSource.loop = true;
-    targetSource.loopStart = targetLoopStart;
-    targetSource.loopEnd = targetLoopEnd;
+    
+    // 💡 플레이리스트 모드: 루프 X, AB 비교 모드: 루프 O
+    targetSource.loop = !isPlaylistMode;
+    targetSource.loopStart = effectiveLoopStart;
+    targetSource.loopEnd = effectiveLoopEnd;
+
+    // 💡 플레이리스트 연속 재생: 한 곡 완주 시 다음 버전으로 바톤 터치
+    if (isPlaylistMode) {
+      targetSource.onended = () => {
+        if (taskId === playTaskIdRef.current && isPlayingRef.current) {
+          const currentIndex = siblingVersions.findIndex(v => v.id === targetVersionId);
+          if (currentIndex >= 0 && currentIndex < siblingVersions.length - 1) {
+            const nextVersion = siblingVersions[currentIndex + 1];
+            useAudioStore.getState().setPlayingVersionId(nextVersion.id);
+            startSinglePlay(nextVersion.id, 0);
+          } else {
+            // 마지막 곡까지 모두 완주된 경우 재생 종료
+            useAudioStore.getState().setIsPlaying(false);
+            isPlayingRef.current = false;
+          }
+        }
+      };
+    }
 
     const targetGain = ctx.createGain();
     
@@ -357,7 +390,9 @@ export function AudioEngine({ trackVersions = [] }: { trackVersions: TrackVersio
     targetGain.connect(getMasterGain());
 
     // 재생 위상 보정 계산
-    const targetOffsetCalculated = (targetOffset % targetDuration) + targetLoopStart;
+    const targetOffsetCalculated = isPlaylistMode 
+      ? Math.max(0, targetOffset)
+      : ((targetOffset % targetDuration) + targetLoopStart);
     targetSource.start(now, targetOffsetCalculated);
 
     // 레프 갱신
@@ -370,7 +405,7 @@ export function AudioEngine({ trackVersions = [] }: { trackVersions: TrackVersio
     activeVersionIdsRef.current = siblingIds;
 
     // 타임라인 동기화
-    startSync(maxDuration);
+    startSync(maxDuration, isPlaylistMode);
 
     // 4. 나머지 형제 버전들은 백그라운드 프리로드만 수행하고, 소스는 재생하지 않음! (부하 0%)
     const remainingVersions = sortedSiblings.filter(v => v.id !== targetVersionId);

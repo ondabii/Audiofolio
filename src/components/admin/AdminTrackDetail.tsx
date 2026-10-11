@@ -6,6 +6,7 @@ import { useProjectStore } from '@/store/projectStore';
 import { useAudioStore } from '@/store/audioStore';
 import { InlineEditor } from '@/components/admin/InlineEditor';
 import { extractAudioMetadata } from '@/lib/audioUtils';
+import { TrackComments } from '@/components/audio/TrackComments';
 
 interface AdminTrackDetailProps {
   track: any;
@@ -382,7 +383,31 @@ export function AdminTrackDetail({ track, projectId }: AdminTrackDetailProps) {
             </select>
           </div>
         </div>
-      <div className="flex gap-2 shrink-0">
+      <div className="flex gap-2 shrink-0 items-center">
+        {/* 재생 모드 설정: AB 비교 vs 연속 재생 */}
+        <div className="flex items-center gap-1.5 bg-[#1c2126] px-2.5 py-1.5 rounded border border-[#22272c] text-xs">
+          <span className="text-gray-400 font-bold shrink-0">재생:</span>
+          <select
+            value={track.playback_mode || 'ab_test'}
+            onChange={async (e) => {
+              const newMode = e.target.value;
+              useProjectStore.getState().updateTrackPlaybackMode(track.id, newMode);
+              await fetch('/api/actions', {
+                method: 'POST',
+                headers: { 'Content-Type': 'application/json' },
+                body: JSON.stringify({
+                  action: 'updateTrackPlaybackMode',
+                  payload: { id: track.id, playback_mode: newMode }
+                })
+              });
+            }}
+            className="bg-transparent text-xs font-bold text-primary outline-none cursor-pointer"
+          >
+            <option value="ab_test" className="bg-[#1c2126] text-white">AB 비교</option>
+            <option value="playlist" className="bg-[#1c2126] text-white">연속 재생</option>
+          </select>
+        </div>
+
         <button
           onClick={() => setIsEmbedModalOpen(true)}
           className="flex items-center gap-1.5 px-3 py-1.5 rounded text-xs font-extrabold bg-[#1c2126] text-gray-300 hover:text-white border border-[#22272c] hover:border-primary/50 transition-all cursor-pointer"
@@ -551,6 +576,11 @@ export function AdminTrackDetail({ track, projectId }: AdminTrackDetailProps) {
                 title="" 
               />
             )}
+          </div>
+
+          {/* ── 트랙 댓글 영역 (어드민 뷰: IP 표시 및 삭제 권한) ── */}
+          <div className="mt-8 pt-6 border-t border-[#22272c]">
+            <TrackComments trackId={track.id} isAdmin={true} />
           </div>
         </div>
       </div>

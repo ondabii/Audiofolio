@@ -5,6 +5,7 @@ import { Play, Pause, Headphones, Loader, Sparkles, Download } from 'lucide-reac
 import { useAudioStore } from '@/store/audioStore';
 import { useProjectStore } from '@/store/projectStore';
 import { InlineEditor } from '@/components/admin/InlineEditor';
+import { TrackComments } from '@/components/audio/TrackComments';
 
 export function TrackItem({ track, readOnly = false }: { track: any; readOnly?: boolean }) {
   const playingVersionId = useAudioStore(state => state.playingVersionId);
@@ -192,6 +193,9 @@ export function TrackItem({ track, readOnly = false }: { track: any; readOnly?: 
           <span>{totalDisplayDuration > 0 ? formatTime(totalDisplayDuration) : '00:00'}</span>
         </div>
       </div>
+
+      {/* ── 댓글 영역 ── */}
+      <TrackComments trackId={track.id} isAdmin={!readOnly} />
     </div>
   );
 }

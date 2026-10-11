@@ -172,6 +172,9 @@ export async function POST(request: NextRequest) {
       case "renameTrack":
         await executeActionQuery("UPDATE tracks SET title = ? WHERE id = ?", [payload.title, payload.id]);
         break;
+      case "updateTrackPlaybackMode":
+        await executeActionQuery("UPDATE tracks SET playback_mode = ? WHERE id = ?", [payload.playback_mode, payload.id]);
+        break;
       case "moveTrackToCategory":
         await executeActionQuery("UPDATE tracks SET category_id = ? WHERE id = ?", [payload.category_id, payload.id]);
         break;

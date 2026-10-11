@@ -20,6 +20,9 @@ export interface TrackData {
   category_id: string;
   title: string;
   order_index: number;
+  is_normalized?: boolean;
+  is_downloadable?: boolean;
+  playback_mode?: string;
   versions: VersionData[];
 }
 
@@ -49,6 +52,7 @@ interface ProjectStoreState {
   setProject: (project: ProjectData) => void;
   updateCategoryTitle: (id: string, title: string) => void;
   updateTrackTitle: (id: string, title: string) => void;
+  updateTrackPlaybackMode: (id: string, mode: string) => void;
   addCategory: (category: CategoryData) => void;
   addTrack: (track: TrackData) => void;
   deleteCategory: (id: string) => void;
@@ -91,6 +95,21 @@ export const useProjectStore = create<ProjectStoreState>((set) => ({
           ...c,
           tracks: c.tracks.map(t => 
             t.id === id ? { ...t, title } : t
+          )
+        }))
+      }
+    };
+  }),
+
+  updateTrackPlaybackMode: (id, mode) => set((state) => {
+    if (!state.project) return state;
+    return {
+      project: {
+        ...state.project,
+        categories: state.project.categories.map(c => ({
+          ...c,
+          tracks: c.tracks.map(t => 
+            t.id === id ? { ...t, playback_mode: mode } : t
           )
         }))
       }

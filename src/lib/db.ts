@@ -20,6 +20,9 @@ export interface TrackData {
   category_id: string;
   title: string;
   order_index: number;
+  is_normalized?: boolean;
+  is_downloadable?: boolean;
+  playback_mode?: string;
   versions: VersionData[];
 }
 
@@ -144,6 +147,7 @@ export async function getProjectData(alias: string) {
         ...c,
         tracks: tracks.filter((t: any) => t.category_id === c.id).map((t: any) => ({
           ...t,
+          playback_mode: t.playback_mode || 'ab_test',
           versions: (versions || []).filter((v: any) => v.track_id === t.id).map((v: any) => ({
             ...v,
             is_representative: v.is_representative === 1 || v.is_representative === true,
@@ -210,6 +214,7 @@ export interface EmbedTrackResponse {
     category_id: string;
     is_downloadable: boolean;
     is_normalized: boolean;
+    playback_mode?: string;
     versions: VersionData[];
   };
   project: {
@@ -292,6 +297,7 @@ export async function getEmbedTrackData(trackId: string): Promise<EmbedTrackResp
         category_id: String(trackRow.category_id),
         is_downloadable: trackRow.is_downloadable === 1 || trackRow.is_downloadable === true,
         is_normalized: trackRow.is_normalized === 1 || trackRow.is_normalized === true,
+        playback_mode: trackRow.playback_mode ? String(trackRow.playback_mode) : 'ab_test',
         versions
       },
       project: {
