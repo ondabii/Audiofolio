@@ -126,6 +126,57 @@ export function TrackComments({ trackId, isAdmin = false }: TrackCommentsProps) 
     }
   };
 
+  const [editingCommentId, setEditingCommentId] = useState<string | null>(null);
+  const [editAuthorName, setEditAuthorName] = useState('');
+  const [editContent, setEditContent] = useState('');
+  const [isEditingSubmitting, setIsEditingSubmitting] = useState(false);
+
+  const handleStartEdit = (c: CommentItem) => {
+    setEditingCommentId(c.id);
+    setEditAuthorName(c.author_name);
+    setEditContent(c.content);
+  };
+
+  const handleCancelEdit = () => {
+    setEditingCommentId(null);
+    setEditAuthorName('');
+    setEditContent('');
+  };
+
+  const handleSaveEdit = async (id: string) => {
+    if (!editAuthorName.trim() || !editContent.trim() || isEditingSubmitting) return;
+
+    setIsEditingSubmitting(true);
+    const author = editAuthorName.trim();
+    const body = editContent.trim();
+
+    try {
+      const res = await fetch('/api/comments', {
+        method: 'PATCH',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({
+          id,
+          author_name: author,
+          content: body
+        })
+      });
+
+      if (res.ok) {
+        setComments(prev => prev.map(c => 
+          c.id === id ? { ...c, author_name: author, content: body } : c
+        ));
+        setEditingCommentId(null);
+      } else {
+        alert("댓글 수정에 실패했습니다.");
+      }
+    } catch (e) {
+      console.error("Failed to edit comment:", e);
+      alert("댓글 수정 중 오류가 발생했습니다.");
+    } finally {
+      setIsEditingSubmitting(false);
+    }
+  };
+
   const handleDelete = async (id: string) => {
     if (!confirm("댓글을 삭제하시겠습니까?")) return;
     try {
@@ -164,17 +215,85 @@ export function TrackComments({ trackId, isAdmin = false }: TrackCommentsProps) 
                 </div>
 
                 {isAdmin && (
-                  <button
-                    onClick={() => handleDelete(c.id)}
-                    className="text-[11px] text-gray-500 hover:text-red-400 transition-colors cursor-pointer"
-                  >
-                    삭제
-                  </button>
+                  <div className="flex items-center gap-2">
+                    {editingCommentId === c.id ? (
+                      <button
+                        onClick={handleCancelEdit}
+                        className="text-[11px] text-gray-400 hover:text-white transition-colors cursor-pointer"
+                      >
+                        취소
+                      </button>
+                    ) : (
+                      <>
+                        <button
+                          onClick={() => handleStartEdit(c)}
+                          className="text-[11px] text-gray-400 hover:text-primary transition-colors cursor-pointer"
+                        >
+                          수정
+                        </button>
+                        <button
+                          onClick={() => handleDelete(c.id)}
+                          className="text-[11px] text-gray-500 hover:text-red-400 transition-colors cursor-pointer"
+                        >
+                          삭제
+                        </button>
+                      </>
+                    )}
+                  </div>
                 )}
               </div>
-              <div className="text-gray-300 leading-relaxed pl-0.5 select-text">
-                {renderTextWithLinks(c.content)}
-              </div>
+              {editingCommentId === c.id ? (
+                <div className="mt-1 space-y-1.5 pt-0.5">
+                  <div className="flex gap-2">
+                    <input
+                      type="text"
+                      value={editAuthorName}
+                      onChange={e => setEditAuthorName(e.target.value)}
+                      placeholder="이름"
+                      className="w-24 sm:w-32 bg-[#161a1d] text-xs text-white border border-[#262b30] rounded px-2.5 py-1 outline-none focus:border-primary"
+                      required
+                    />
+                    <input
+                      type="text"
+                      value={editContent}
+                      onChange={e => setEditContent(e.target.value)}
+                      onKeyDown={e => {
+                        if (e.key === 'Enter') {
+                          e.preventDefault();
+                          handleSaveEdit(c.id);
+                        } else if (e.key === 'Escape') {
+                          handleCancelEdit();
+                        }
+                      }}
+                      placeholder="댓글 내용"
+                      className="flex-1 bg-[#161a1d] text-xs text-white border border-[#262b30] rounded px-2.5 py-1 outline-none focus:border-primary"
+                      autoFocus
+                      required
+                    />
+                  </div>
+                  <div className="flex justify-end gap-1.5">
+                    <button
+                      type="button"
+                      onClick={handleCancelEdit}
+                      className="px-2.5 py-1 bg-gray-800 hover:bg-gray-700 text-gray-300 text-[11px] rounded transition-colors cursor-pointer"
+                    >
+                      취소
+                    </button>
+                    <button
+                      type="button"
+                      disabled={isEditingSubmitting}
+                      onClick={() => handleSaveEdit(c.id)}
+                      className="px-2.5 py-1 bg-primary hover:bg-primary/90 text-black font-bold text-[11px] rounded transition-colors cursor-pointer disabled:opacity-50"
+                    >
+                      저장
+                    </button>
+                  </div>
+                </div>
+              ) : (
+                <div className="text-gray-300 leading-relaxed pl-0.5 select-text">
+                  {renderTextWithLinks(c.content)}
+                </div>
+              )}
             </div>
           ))}
         </div>

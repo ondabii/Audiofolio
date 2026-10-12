@@ -5,7 +5,7 @@ export const runtime = 'edge';
 
 const corsHeaders = {
   'Access-Control-Allow-Origin': '*',
-  'Access-Control-Allow-Methods': 'GET, POST, DELETE, OPTIONS',
+  'Access-Control-Allow-Methods': 'GET, POST, PATCH, DELETE, OPTIONS',
   'Access-Control-Allow-Headers': 'Content-Type, Authorization',
 };
 
@@ -113,5 +113,50 @@ export async function DELETE(request: NextRequest) {
   } catch (error: any) {
     console.error("DELETE comment error:", error);
     return NextResponse.json({ error: error.message || "Failed to delete comment" }, { status: 500, headers: corsHeaders });
+  }
+}
+
+// ─── 4. 댓글 수정 (PATCH) ───
+export async function PATCH(request: NextRequest) {
+  try {
+    const body = await request.json() as {
+      id?: string;
+      author_name?: string;
+      content?: string;
+    };
+
+    const { id, author_name, content } = body;
+
+    if (!id || (!author_name?.trim() && !content?.trim())) {
+      return NextResponse.json({ error: "Missing required fields" }, { status: 400, headers: corsHeaders });
+    }
+
+    const cleanAuthor = author_name ? author_name.trim().slice(0, 50) : undefined;
+    const cleanContent = content ? content.trim().slice(0, 1000) : undefined;
+
+    if (cleanAuthor !== undefined && cleanContent !== undefined) {
+      await executeD1Query(
+        "UPDATE comments SET author_name = ?, content = ? WHERE id = ?",
+        [cleanAuthor, cleanContent, id]
+      );
+    } else if (cleanContent !== undefined) {
+      await executeD1Query(
+        "UPDATE comments SET content = ? WHERE id = ?",
+        [cleanContent, id]
+      );
+    } else if (cleanAuthor !== undefined) {
+      await executeD1Query(
+        "UPDATE comments SET author_name = ? WHERE id = ?",
+        [cleanAuthor, id]
+      );
+    }
+
+    return NextResponse.json({
+      success: true,
+      comment: { id, author_name: cleanAuthor, content: cleanContent }
+    }, { headers: corsHeaders });
+  } catch (error: any) {
+    console.error("PATCH comment error:", error);
+    return NextResponse.json({ error: error.message || "Failed to update comment" }, { status: 500, headers: corsHeaders });
   }
 }
