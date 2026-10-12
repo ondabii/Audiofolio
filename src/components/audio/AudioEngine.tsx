@@ -140,14 +140,11 @@ export function AudioEngine({ trackVersions = [] }: { trackVersions: TrackVersio
     activeVersionIdsRef.current = [];
   }, [stopSync]);
 
-  // 언마운트 정리
+  // 언마운트 정리 (오디오 소스 노드만 클린업하고 싱글톤 AudioContext는 유지)
   useEffect(() => {
     return () => {
       stopAllSources();
-      if (audioCtxRef.current) {
-        audioCtxRef.current.close();
-        audioCtxRef.current = null;
-      }
+      audioCtxRef.current = null;
     };
   }, [stopAllSources]);
 
@@ -179,7 +176,23 @@ export function AudioEngine({ trackVersions = [] }: { trackVersions: TrackVersio
 
     const arrayBuffer = await res.arrayBuffer();
     const ctx = getAudioContext();
-    const audioBuffer = await ctx.decodeAudioData(arrayBuffer);
+    
+    // 💡 Safari/Firefox/모바일 크로스 브라우저 호환 디코딩 래퍼 (ArrayBuffer neuter 방지 및 Callback/Promise 하이브리드 지원)
+    const audioBuffer = await new Promise<AudioBuffer>((resolve, reject) => {
+      const bufferCopy = arrayBuffer.slice(0);
+      try {
+        const promise = ctx.decodeAudioData(
+          bufferCopy,
+          (decoded) => resolve(decoded),
+          (err) => reject(err)
+        );
+        if (promise && typeof promise.then === 'function') {
+          promise.then(resolve).catch(reject);
+        }
+      } catch (err) {
+        reject(err);
+      }
+    });
     
     // 🔍 Intelligent Silence Trimmer (Vorbis/MP3 디코더 패딩 제거용 40ms 윈도우 가드 탑재)
     const channelData = audioBuffer.getChannelData(0); // 1번 채널 기준으로 무음구간 분석
@@ -248,8 +261,10 @@ export function AudioEngine({ trackVersions = [] }: { trackVersions: TrackVersio
   // ─── 활성 음원 동적 재생 기동 엔진 (Active-Only Voice Control) ───
   const startSinglePlay = useCallback(async (targetVersionId: string, targetOffset: number) => {
     const ctx = getAudioContext();
-    if (ctx.state === 'suspended') {
-      await ctx.resume();
+    if (ctx.state === 'suspended' || (ctx as any).state === 'interrupted') {
+      try {
+        await ctx.resume();
+      } catch (e) {}
     }
 
     if (!targetVersionId) return;

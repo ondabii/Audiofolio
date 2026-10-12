@@ -175,6 +175,7 @@ export function TrackItem({ track, readOnly = false }: { track: any; readOnly?: 
                     </button>
                   ) : (
                     <button
+                      onPointerDown={() => initAudioContext()}
                       onClick={() => handlePlayToggle(version.id)}
                       className={`${
                         isCurrent || showPlayAsRep ? 'text-primary hover:text-primary/80' : 'text-gray-600 hover:text-primary'
@@ -342,6 +343,7 @@ function VersionProgressBar({
         !isReady ? 'opacity-50' : ''
       }`}
       style={{ width: `${spectrumWidthPercent}%` }}
+      onPointerDown={() => initAudioContext()}
       onClick={e => {
         if (!isReady) return;
         initAudioContext();
