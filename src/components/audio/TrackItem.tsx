@@ -168,7 +168,7 @@ export function TrackItem({ track, readOnly = false }: { track: any; readOnly?: 
                 <div className="flex justify-center items-center h-full">
                   {!isReady ? (
                     <button
-                      className="text-gray-700 cursor-not-allowed transition-colors flex items-center justify-center w-full h-full"
+                      className={`${isCurrent ? 'text-primary' : 'text-gray-700'} cursor-not-allowed transition-colors flex items-center justify-center w-full h-full`}
                       aria-label="로딩 중"
                     >
                       <Loader className="w-[18px] h-[18px] animate-spin" />
@@ -285,6 +285,7 @@ function VersionProgressBar({
   const setPlayingVersionId = useAudioStore(state => state.setPlayingVersionId);
   const setIsPlaying = useAudioStore(state => state.setIsPlaying);
   const normalizedVersionIds = useAudioStore(state => state.normalizedVersionIds);
+  const loadingProgress = useAudioStore(state => state.loadingProgressMap[version.id]);
  
   const isCurrent = playingVersionId === version.id;
   const isNormalized = normalizedVersionIds[version.id] || false;
@@ -340,12 +341,12 @@ function VersionProgressBar({
       } ${
         isPlayingTrack ? 'shadow-[0_0_15px_rgba(245,166,35,0.05)]' : ''
       } relative overflow-hidden hover:bg-[#252b31] cursor-pointer ${
-        !isReady ? 'opacity-50' : ''
+        !isReady && !loadingProgress ? 'opacity-50' : ''
       }`}
       style={{ width: `${spectrumWidthPercent}%` }}
       onPointerDown={() => initAudioContext()}
       onClick={e => {
-        if (!isReady) return;
+        if (!isReady || loadingProgress) return;
         initAudioContext();
         const rect = e.currentTarget.getBoundingClientRect();
         const x = e.clientX - rect.left;
@@ -479,6 +480,35 @@ function VersionProgressBar({
           </span>
         )}
       </div>
+
+      {/* ── 재생 준비 단계별 진척도 오버레이 (0% ~ 100%) ── */}
+      {loadingProgress && (
+        <div className="absolute inset-0 bg-[#0d1012]/85 backdrop-blur-[2px] flex items-center justify-between px-3 z-30 pointer-events-none transition-opacity duration-200">
+          {/* 좌측: 미니 회전 스피너 + 단계별 상태 메시지 */}
+          <div className="flex items-center gap-2 min-w-0">
+            <Loader className="w-3.5 h-3.5 text-primary animate-spin shrink-0" />
+            <span className="text-xs font-medium text-gray-200 truncate">
+              {loadingProgress.message}
+            </span>
+          </div>
+
+          {/* 우측: 숫자 퍼센트 */}
+          <div className="flex items-baseline gap-0.5 shrink-0 pl-2">
+            <span className="text-sm font-bold font-mono text-primary">
+              {Math.round(loadingProgress.percent)}
+            </span>
+            <span className="text-[10px] font-bold text-primary">%</span>
+          </div>
+
+          {/* 바닥면 얇은 프로그레스 게이지 라인 */}
+          <div className="absolute bottom-0 left-0 right-0 h-[2px] bg-gray-800">
+            <div
+              className="h-full bg-primary shadow-[0_0_8px_#f5a623] transition-all duration-200 ease-out"
+              style={{ width: `${Math.min(100, Math.max(0, loadingProgress.percent))}%` }}
+            />
+          </div>
+        </div>
+      )}
     </div>
   );
 }

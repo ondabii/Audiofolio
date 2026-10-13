@@ -30,6 +30,7 @@ export function AudioEngine({ trackVersions = [] }: { trackVersions: TrackVersio
     setGlobalCurrentTime,
     setRawCurrentTime,
     updateVersionState,
+    setLoadingProgress,
     clearSeekRequest,
   } = useAudioStore();
 
@@ -149,22 +150,35 @@ export function AudioEngine({ trackVersions = [] }: { trackVersions: TrackVersio
   }, [stopAllSources]);
 
   // ─── 오디오 바이너리 fetch 및 AudioBuffer 디코딩 캐시 ───
-  const loadAudioBuffer = useCallback(async (version: TrackVersion): Promise<{ buffer: AudioBuffer; loopStart: number; loopEnd: number; maxPeak: number }> => {
+  const loadAudioBuffer = useCallback(async (
+    version: TrackVersion,
+    reportProgress: boolean = false
+  ): Promise<{ buffer: AudioBuffer; loopStart: number; loopEnd: number; maxPeak: number }> => {
     const id = version.id;
     if (buffersRef.current[id]) {
       return buffersRef.current[id];
     }
 
     updateVersionState(id, { isReady: false });
+    if (reportProgress) {
+      setLoadingProgress(id, {
+        stage: 'connecting',
+        percent: 10,
+        message: '서버 연결 중...'
+      });
+    }
+
     const url = `/api/audio-url?key=${encodeURIComponent(version.audio_url)}`;
     
     // 💡 Cache API 가로채기 (오프라인 재생 지원)
     let res: Response;
+    let isFromCache = false;
     try {
       const cache = await caches.open('audiofolio-audio-v1');
       const cachedRes = await cache.match(url);
       if (cachedRes) {
         res = cachedRes;
+        isFromCache = true;
       } else {
         res = await fetch(url);
       }
@@ -172,28 +186,108 @@ export function AudioEngine({ trackVersions = [] }: { trackVersions: TrackVersio
       res = await fetch(url);
     }
     
-    if (!res.ok) throw new Error(`HTTP error: ${res.status}`);
+    if (!res.ok) {
+      if (reportProgress) setLoadingProgress(id, null);
+      throw new Error(`HTTP error: ${res.status}`);
+    }
 
-    const arrayBuffer = await res.arrayBuffer();
+    let arrayBuffer: ArrayBuffer;
+
+    if (isFromCache || !reportProgress || !res.body) {
+      if (reportProgress) {
+        setLoadingProgress(id, {
+          stage: 'downloading',
+          percent: 75,
+          message: '캐시 음원 로드 중...'
+        });
+      }
+      arrayBuffer = await res.arrayBuffer();
+    } else {
+      // 💡 ReadableStream을 통한 실시간 바이트 수신율 연산 (15% ~ 80% 구간 매핑)
+      const contentLengthHeader = res.headers.get('content-length');
+      const totalBytes = contentLengthHeader ? parseInt(contentLengthHeader, 10) : 0;
+      
+      const reader = res.body.getReader();
+      const chunks: Uint8Array[] = [];
+      let receivedBytes = 0;
+      let lastReportTime = 0;
+
+      while (true) {
+        const { done, value } = await reader.read();
+        if (done) break;
+        if (value) {
+          chunks.push(value);
+          receivedBytes += value.length;
+
+          const now = Date.now();
+          if (now - lastReportTime > 40) {
+            lastReportTime = now;
+            let currentPct = 40;
+            if (totalBytes > 0) {
+              currentPct = Math.min(80, 15 + Math.round((receivedBytes / totalBytes) * 65));
+            } else {
+              // totalBytes가 없는 경우 점진적 증가
+              currentPct = Math.min(78, 15 + Math.round((receivedBytes / (1024 * 1024 * 5)) * 63));
+            }
+            setLoadingProgress(id, {
+              stage: 'downloading',
+              percent: currentPct,
+              message: '음원 수신 중...'
+            });
+          }
+        }
+      }
+
+      const merged = new Uint8Array(receivedBytes);
+      let offset = 0;
+      for (const chunk of chunks) {
+        merged.set(chunk, offset);
+        offset += chunk.length;
+      }
+      arrayBuffer = merged.buffer;
+    }
+
     const ctx = getAudioContext();
     
+    if (reportProgress) {
+      setLoadingProgress(id, {
+        stage: 'decoding',
+        percent: 85,
+        message: '오디오 디코딩 중...'
+      });
+    }
+
     // 💡 Safari/Firefox/모바일 크로스 브라우저 호환 디코딩 래퍼 (ArrayBuffer neuter 방지 및 Callback/Promise 하이브리드 지원)
-    const audioBuffer = await new Promise<AudioBuffer>((resolve, reject) => {
-      const bufferCopy = arrayBuffer.slice(0);
-      try {
-        const promise = ctx.decodeAudioData(
-          bufferCopy,
-          (decoded) => resolve(decoded),
-          (err) => reject(err)
-        );
-        if (promise && typeof promise.then === 'function') {
-          promise.then(resolve).catch(reject);
+    let audioBuffer: AudioBuffer;
+    try {
+      audioBuffer = await new Promise<AudioBuffer>((resolve, reject) => {
+        const bufferCopy = arrayBuffer.slice(0);
+        try {
+          const promise = ctx.decodeAudioData(
+            bufferCopy,
+            (decoded) => resolve(decoded),
+            (err) => reject(err)
+          );
+          if (promise && typeof promise.then === 'function') {
+            promise.then(resolve).catch(reject);
+          }
+        } catch (err) {
+          reject(err);
         }
-      } catch (err) {
-        reject(err);
-      }
-    });
+      });
+    } catch (decodeErr) {
+      if (reportProgress) setLoadingProgress(id, null);
+      throw decodeErr;
+    }
     
+    if (reportProgress) {
+      setLoadingProgress(id, {
+        stage: 'decoding',
+        percent: 95,
+        message: '오디오 최적화 중...'
+      });
+    }
+
     // 🔍 Intelligent Silence Trimmer (Vorbis/MP3 디코더 패딩 제거용 40ms 윈도우 가드 탑재)
     const channelData = audioBuffer.getChannelData(0); // 1번 채널 기준으로 무음구간 분석
     const len = channelData.length;
@@ -254,9 +348,20 @@ export function AudioEngine({ trackVersions = [] }: { trackVersions: TrackVersio
     // 실제 소리가 시작되고 끝나는 유효 재생 시간을 기준치로 산출
     const durationMs = Math.round((loopEnd - loopStart) * 1000);
     updateVersionState(id, { isReady: true, durationMs });
+
+    if (reportProgress) {
+      setLoadingProgress(id, {
+        stage: 'ready',
+        percent: 100,
+        message: '재생 준비 완료'
+      });
+      setTimeout(() => {
+        setLoadingProgress(id, null);
+      }, 150);
+    }
     
     return cached;
-  }, [getAudioContext, updateVersionState]);
+  }, [getAudioContext, updateVersionState, setLoadingProgress]);
 
   // ─── 활성 음원 동적 재생 기동 엔진 (Active-Only Voice Control) ───
   const startSinglePlay = useCallback(async (targetVersionId: string, targetOffset: number) => {
@@ -292,10 +397,10 @@ export function AudioEngine({ trackVersions = [] }: { trackVersions: TrackVersio
     // 경합 조건 방지를 위한 고유 태스크 ID 생성
     const taskId = ++playTaskIdRef.current;
 
-    // 1. 재생하기로 선택한 버전(targetVersion)의 버퍼 캐시 로드
+    // 1. 재생하기로 선택한 버전(targetVersion)의 버퍼 캐시 로드 (진척도 리포트 활성화)
     let cachedTarget;
     try {
-      cachedTarget = await loadAudioBuffer(targetVersion);
+      cachedTarget = await loadAudioBuffer(targetVersion, true);
       if (taskId !== playTaskIdRef.current) return;
     } catch (e) {
       console.error(`재생 대상 오디오 로딩 실패: ${targetVersion.title}`, e);

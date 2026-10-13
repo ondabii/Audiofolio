@@ -1,7 +1,7 @@
 'use client';
 
 import { useState } from 'react';
-import { Play, Pause, Volume2, Volume1, VolumeX, Volume } from 'lucide-react';
+import { Play, Pause, Volume2, Volume1, VolumeX, Volume, Loader } from 'lucide-react';
 import { useAudioStore } from '@/store/audioStore';
 import { useProjectStore } from '@/store/projectStore';
 
@@ -12,6 +12,7 @@ export function BottomBarPlayer() {
   const setIsPlaying = useAudioStore(state => state.setIsPlaying);
   const volume = useAudioStore(state => state.volume);
   const setVolume = useAudioStore(state => state.setVolume);
+  const loadingProgress = useAudioStore(state => playingVersionId ? state.loadingProgressMap[playingVersionId] : null);
 
   const [prevVolume, setPrevVolume] = useState(0.8);
   const [isVolHovered, setIsVolHovered] = useState(false);
@@ -67,9 +68,11 @@ export function BottomBarPlayer() {
                 ? 'bg-primary text-black hover:scale-105 active:scale-95 shadow-md shadow-primary/20'
                 : 'bg-gray-800 text-gray-600 cursor-not-allowed'
             }`}
-            aria-label={isPlaying ? '일시정지' : '재생'}
+            aria-label={loadingProgress ? '로딩 중' : isPlaying ? '일시정지' : '재생'}
           >
-            {isPlaying ? (
+            {loadingProgress ? (
+              <Loader className="w-[18px] h-[18px] text-black animate-spin" />
+            ) : isPlaying ? (
               <Pause className="w-[18px] h-[18px] fill-black text-black" />
             ) : (
               <Play className="w-[18px] h-[18px] fill-black text-black ml-0.5" />
@@ -80,7 +83,14 @@ export function BottomBarPlayer() {
             {playingInfo ? (
               <div className="flex flex-col text-sm font-bold truncate leading-snug">
                 <span className="text-white truncate">{playingInfo.trackTitle}</span>
-                <span className="text-primary font-medium text-xs truncate">{playingInfo.versionTitle}</span>
+                <span className="text-primary font-medium text-xs truncate">
+                  {playingInfo.versionTitle}
+                  {loadingProgress && (
+                    <span className="ml-1 text-[11px] font-mono text-primary/90">
+                      ({Math.round(loadingProgress.percent)}%)
+                    </span>
+                  )}
+                </span>
               </div>
             ) : (
               <div className="flex items-center gap-2 text-gray-500 text-sm font-bold">

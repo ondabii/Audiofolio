@@ -6,6 +6,12 @@ export interface VersionState {
   durationMs: number;
 }
 
+export interface LoadingProgress {
+  stage: 'connecting' | 'downloading' | 'decoding' | 'ready';
+  percent: number;
+  message: string;
+}
+
 interface AudioStoreState {
   // 현재 메인으로 재생 중인 트랙 버전 ID
   playingVersionId: string | null;
@@ -19,6 +25,8 @@ interface AudioStoreState {
   loadingQueue: string[];
   // 각 버전별 3초 버퍼 준비 상태 맵
   versionStates: Record<string, VersionState>;
+  // 각 버전별 재생 준비 단계별 진척도 맵 (0% ~ 100%)
+  loadingProgressMap: Record<string, LoadingProgress>;
   // 각 버전별 볼륨 피크 노멀라이즈 토글 여부
   normalizedVersionIds: Record<string, boolean>;
   
@@ -35,6 +43,7 @@ interface AudioStoreState {
   setIsPlaying: (isPlaying: boolean) => void;
   setLoadingQueue: (queue: string[]) => void;
   updateVersionState: (id: string, state: Partial<VersionState>) => void;
+  setLoadingProgress: (id: string, progress: LoadingProgress | null) => void;
   toggleNormalize: (versionId: string) => void;
   setVolume: (volume: number) => void;
   requestSeek: (time: number) => void;
@@ -49,6 +58,7 @@ export const useAudioStore = create<AudioStoreState>((set) => ({
   isPlaying: false,
   loadingQueue: [],
   versionStates: {},
+  loadingProgressMap: {},
   normalizedVersionIds: {},
   volume: 0.8,
   seekRequestTime: null,
@@ -67,6 +77,19 @@ export const useAudioStore = create<AudioStoreState>((set) => ({
       }
     }
   })),
+  setLoadingProgress: (id, progress) => set((prev) => {
+    if (!progress) {
+      const nextMap = { ...prev.loadingProgressMap };
+      delete nextMap[id];
+      return { loadingProgressMap: nextMap };
+    }
+    return {
+      loadingProgressMap: {
+        ...prev.loadingProgressMap,
+        [id]: progress
+      }
+    };
+  }),
   toggleNormalize: (versionId) => set((prev) => ({
     normalizedVersionIds: {
       ...prev.normalizedVersionIds,
@@ -83,6 +106,7 @@ export const useAudioStore = create<AudioStoreState>((set) => ({
     isPlaying: false,
     loadingQueue: [],
     versionStates: {},
+    loadingProgressMap: {},
     normalizedVersionIds: {},
     volume: 0.8,
     seekRequestTime: null
