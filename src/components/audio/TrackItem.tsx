@@ -1,7 +1,7 @@
 'use client';
 
 import { useEffect, useState } from 'react';
-import { Play, Pause, Headphones, Loader, Sparkles, Download } from 'lucide-react';
+import { Play, Pause, Headphones, Loader, Sparkles, Download, AlertCircle } from 'lucide-react';
 import { useAudioStore } from '@/store/audioStore';
 import { useProjectStore } from '@/store/projectStore';
 import { InlineEditor } from '@/components/admin/InlineEditor';
@@ -482,33 +482,56 @@ function VersionProgressBar({
       </div>
 
       {/* ── 재생 준비 단계별 진척도 오버레이 (0% ~ 100%) ── */}
-      {loadingProgress && (
-        <div className="absolute inset-0 bg-[#0d1012]/85 backdrop-blur-[2px] flex items-center justify-between px-3 z-30 pointer-events-none transition-opacity duration-200">
-          {/* 좌측: 미니 회전 스피너 + 단계별 상태 메시지 */}
-          <div className="flex items-center gap-2 min-w-0">
-            <Loader className="w-3.5 h-3.5 text-primary animate-spin shrink-0" />
-            <span className="text-xs font-medium text-gray-200 truncate">
-              {loadingProgress.message}
-            </span>
-          </div>
+      {loadingProgress && (() => {
+        const isError = loadingProgress.stage === 'error' || loadingProgress.isError;
+        return (
+          <div
+            className={`absolute inset-0 ${
+              isError
+                ? 'bg-[#180a0a]/92 border border-red-500/40 text-red-200'
+                : 'bg-[#0d1012]/85 text-gray-200'
+            } backdrop-blur-[2px] flex items-center justify-between px-3 z-30 pointer-events-none transition-all duration-200`}
+          >
+            {/* 좌측: 미니 회전 스피너 또는 에러 경고 아이콘 + 단계별 상태 메시지 */}
+            <div className="flex items-center gap-2 min-w-0">
+              {isError ? (
+                <AlertCircle className="w-3.5 h-3.5 text-red-400 shrink-0 animate-pulse" />
+              ) : (
+                <Loader className="w-3.5 h-3.5 text-primary animate-spin shrink-0" />
+              )}
+              <span
+                className={`text-xs font-semibold truncate ${
+                  isError ? 'text-red-300' : 'text-gray-200'
+                }`}
+              >
+                {loadingProgress.message}
+              </span>
+            </div>
 
-          {/* 우측: 숫자 퍼센트 */}
-          <div className="flex items-baseline gap-0.5 shrink-0 pl-2">
-            <span className="text-sm font-bold font-mono text-primary">
-              {Math.round(loadingProgress.percent)}
-            </span>
-            <span className="text-[10px] font-bold text-primary">%</span>
-          </div>
+            {/* 우측: 숫자 퍼센트 (에러 시에는 숨김) */}
+            {!isError && (
+              <div className="flex items-baseline gap-0.5 shrink-0 pl-2">
+                <span className="text-sm font-bold font-mono text-primary">
+                  {Math.round(loadingProgress.percent)}
+                </span>
+                <span className="text-[10px] font-bold text-primary">%</span>
+              </div>
+            )}
 
-          {/* 바닥면 얇은 프로그레스 게이지 라인 */}
-          <div className="absolute bottom-0 left-0 right-0 h-[2px] bg-gray-800">
-            <div
-              className="h-full bg-primary shadow-[0_0_8px_#f5a623] transition-all duration-200 ease-out"
-              style={{ width: `${Math.min(100, Math.max(0, loadingProgress.percent))}%` }}
-            />
+            {/* 바닥면 얇은 프로그레스 게이지 라인 */}
+            <div className="absolute bottom-0 left-0 right-0 h-[2px] bg-gray-800">
+              <div
+                className={`h-full ${
+                  isError
+                    ? 'bg-red-500 shadow-[0_0_8px_rgba(239,68,68,0.7)] w-full'
+                    : 'bg-primary shadow-[0_0_8px_#f5a623]'
+                } transition-all duration-150 ease-out`}
+                style={!isError ? { width: `${Math.min(100, Math.max(0, loadingProgress.percent))}%` } : undefined}
+              />
+            </div>
           </div>
-        </div>
-      )}
+        );
+      })()}
     </div>
   );
 }

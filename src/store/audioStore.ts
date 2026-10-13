@@ -7,9 +7,10 @@ export interface VersionState {
 }
 
 export interface LoadingProgress {
-  stage: 'connecting' | 'downloading' | 'decoding' | 'ready';
+  stage: 'connecting' | 'downloading' | 'decoding' | 'ready' | 'error';
   percent: number;
   message: string;
+  isError?: boolean;
 }
 
 interface AudioStoreState {

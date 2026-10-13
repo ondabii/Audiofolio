@@ -160,12 +160,33 @@ export function AudioEngine({ trackVersions = [] }: { trackVersions: TrackVersio
     }
 
     updateVersionState(id, { isReady: false });
+
+    let connectingInterval: ReturnType<typeof setInterval> | null = null;
+    let connectingTimeout: ReturnType<typeof setTimeout> | null = null;
+    const abortCtrl = new AbortController();
+
     if (reportProgress) {
+      let connectingPct = 0;
       setLoadingProgress(id, {
         stage: 'connecting',
-        percent: 10,
+        percent: 0,
         message: '서버 연결 중...'
       });
+
+      // 💡 0% -> 15% -> 0% 순환 애니메이션 (100ms마다 1%씩 증가, 15% 도달 시 0%로 리셋 후 재상승)
+      connectingInterval = setInterval(() => {
+        connectingPct = (connectingPct + 1) % 16;
+        setLoadingProgress(id, {
+          stage: 'connecting',
+          percent: connectingPct,
+          message: '서버 연결 중...'
+        });
+      }, 100);
+
+      // 💡 10초 네트워크 연결 타임아웃
+      connectingTimeout = setTimeout(() => {
+        abortCtrl.abort();
+      }, 10000);
     }
 
     const url = `/api/audio-url?key=${encodeURIComponent(version.audio_url)}`;
@@ -180,14 +201,43 @@ export function AudioEngine({ trackVersions = [] }: { trackVersions: TrackVersio
         res = cachedRes;
         isFromCache = true;
       } else {
-        res = await fetch(url);
+        res = await fetch(url, { signal: abortCtrl.signal });
       }
-    } catch (e) {
-      res = await fetch(url);
+    } catch (e: unknown) {
+      if (reportProgress) {
+        if (connectingInterval) clearInterval(connectingInterval);
+        if (connectingTimeout) clearTimeout(connectingTimeout);
+
+        setLoadingProgress(id, {
+          stage: 'error',
+          percent: 0,
+          message: '인터넷 연결을 확인해주세요',
+          isError: true
+        });
+        setTimeout(() => {
+          setLoadingProgress(id, null);
+        }, 3500);
+        useAudioStore.getState().setIsPlaying(false);
+      }
+      throw e;
+    } finally {
+      if (connectingInterval) clearInterval(connectingInterval);
+      if (connectingTimeout) clearTimeout(connectingTimeout);
     }
     
     if (!res.ok) {
-      if (reportProgress) setLoadingProgress(id, null);
+      if (reportProgress) {
+        setLoadingProgress(id, {
+          stage: 'error',
+          percent: 0,
+          message: '인터넷 연결을 확인해주세요',
+          isError: true
+        });
+        setTimeout(() => {
+          setLoadingProgress(id, null);
+        }, 3500);
+        useAudioStore.getState().setIsPlaying(false);
+      }
       throw new Error(`HTTP error: ${res.status}`);
     }
 

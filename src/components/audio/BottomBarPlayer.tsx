@@ -70,7 +70,7 @@ export function BottomBarPlayer() {
             }`}
             aria-label={loadingProgress ? '로딩 중' : isPlaying ? '일시정지' : '재생'}
           >
-            {loadingProgress ? (
+            {loadingProgress && !loadingProgress.isError ? (
               <Loader className="w-[18px] h-[18px] text-black animate-spin" />
             ) : isPlaying ? (
               <Pause className="w-[18px] h-[18px] fill-black text-black" />
@@ -85,9 +85,14 @@ export function BottomBarPlayer() {
                 <span className="text-white truncate">{playingInfo.trackTitle}</span>
                 <span className="text-primary font-medium text-xs truncate">
                   {playingInfo.versionTitle}
-                  {loadingProgress && (
+                  {loadingProgress && !loadingProgress.isError && (
                     <span className="ml-1 text-[11px] font-mono text-primary/90">
                       ({Math.round(loadingProgress.percent)}%)
+                    </span>
+                  )}
+                  {loadingProgress?.isError && (
+                    <span className="ml-1 text-[11px] font-medium text-red-400">
+                      ({loadingProgress.message})
                     </span>
                   )}
                 </span>
