@@ -61,6 +61,12 @@ export function AudioEngine({ trackVersions = [] }: { trackVersions: TrackVersio
   // 비동기 재생 경합 조건 Abort를 위한 태스크 ID 레프
   const playTaskIdRef = useRef<number>(0);
 
+  // 재생 트랙/버전 추적 레프
+  const currentTrackIdRef = useRef<string | null>(null);
+  const currentVersionIdRef = useRef<string | null>(null);
+  const pauseTimeRef = useRef<number>(0);
+  const pauseTrackIdRef = useRef<string | null>(null);
+
   // ─── 단일 AudioContext 초기화 ───
   const getAudioContext = useCallback(() => {
     if (!audioCtxRef.current) {
@@ -149,6 +155,34 @@ export function AudioEngine({ trackVersions = [] }: { trackVersions: TrackVersio
     };
   }, [stopAllSources]);
 
+  // ─── 재생 실패 시 완전 정지 및 에러 안내 헬퍼 ───
+  const handlePlayFailure = useCallback((id: string, errorMessage: string = '인터넷 연결을 확인해주세요') => {
+    // 1. 모든 오디오 소스 및 재생 상태 즉시 완전 정지
+    stopAllSources();
+    isPlayingRef.current = false;
+    currentTrackIdRef.current = null;
+    currentVersionIdRef.current = null;
+    pauseTimeRef.current = 0;
+    pauseTrackIdRef.current = null;
+
+    // 2. 스토어 상태 완전 리셋 및 isReady 복구 (무한 로딩 스피너 방지)
+    const store = useAudioStore.getState();
+    store.setIsPlaying(false);
+    store.setPlayingVersionId(null);
+    updateVersionState(id, { isReady: true });
+
+    // 3. 에러 안내 오버레이 표시 후 3.5초 뒤 클리어
+    setLoadingProgress(id, {
+      stage: 'error',
+      percent: 0,
+      message: errorMessage,
+      isError: true,
+    });
+    setTimeout(() => {
+      setLoadingProgress(id, null);
+    }, 3500);
+  }, [stopAllSources, updateVersionState, setLoadingProgress]);
+
   // ─── 오디오 바이너리 fetch 및 AudioBuffer 디코딩 캐시 ───
   const loadAudioBuffer = useCallback(async (
     version: TrackVersion,
@@ -207,17 +241,7 @@ export function AudioEngine({ trackVersions = [] }: { trackVersions: TrackVersio
       if (reportProgress) {
         if (connectingInterval) clearInterval(connectingInterval);
         if (connectingTimeout) clearTimeout(connectingTimeout);
-
-        setLoadingProgress(id, {
-          stage: 'error',
-          percent: 0,
-          message: '인터넷 연결을 확인해주세요',
-          isError: true
-        });
-        setTimeout(() => {
-          setLoadingProgress(id, null);
-        }, 3500);
-        useAudioStore.getState().setIsPlaying(false);
+        handlePlayFailure(id, '인터넷 연결을 확인해주세요');
       }
       throw e;
     } finally {
@@ -227,16 +251,7 @@ export function AudioEngine({ trackVersions = [] }: { trackVersions: TrackVersio
     
     if (!res.ok) {
       if (reportProgress) {
-        setLoadingProgress(id, {
-          stage: 'error',
-          percent: 0,
-          message: '인터넷 연결을 확인해주세요',
-          isError: true
-        });
-        setTimeout(() => {
-          setLoadingProgress(id, null);
-        }, 3500);
-        useAudioStore.getState().setIsPlaying(false);
+        handlePlayFailure(id, '인터넷 연결을 확인해주세요');
       }
       throw new Error(`HTTP error: ${res.status}`);
     }
@@ -326,7 +341,7 @@ export function AudioEngine({ trackVersions = [] }: { trackVersions: TrackVersio
         }
       });
     } catch (decodeErr) {
-      if (reportProgress) setLoadingProgress(id, null);
+      if (reportProgress) handlePlayFailure(id, '오디오 디코딩 실패');
       throw decodeErr;
     }
     
@@ -411,7 +426,7 @@ export function AudioEngine({ trackVersions = [] }: { trackVersions: TrackVersio
     }
     
     return cached;
-  }, [getAudioContext, updateVersionState, setLoadingProgress]);
+  }, [getAudioContext, updateVersionState, setLoadingProgress, handlePlayFailure]);
 
   // ─── 활성 음원 동적 재생 기동 엔진 (Active-Only Voice Control) ───
   const startSinglePlay = useCallback(async (targetVersionId: string, targetOffset: number) => {
@@ -454,6 +469,7 @@ export function AudioEngine({ trackVersions = [] }: { trackVersions: TrackVersio
       if (taskId !== playTaskIdRef.current) return;
     } catch (e) {
       console.error(`재생 대상 오디오 로딩 실패: ${targetVersion.title}`, e);
+      handlePlayFailure(targetVersion.id, '인터넷 연결을 확인해주세요');
       return;
     }
 
@@ -596,12 +612,7 @@ export function AudioEngine({ trackVersions = [] }: { trackVersions: TrackVersio
         }
       }
     })();
-  }, [trackVersions, getAudioContext, stopAllSources, loadAudioBuffer, startSync, getMasterGain]);
-
-  const currentTrackIdRef = useRef<string | null>(null);
-  const currentVersionIdRef = useRef<string | null>(null);
-  const pauseTimeRef = useRef<number>(0);
-  const pauseTrackIdRef = useRef<string | null>(null);
+  }, [trackVersions, getAudioContext, stopAllSources, loadAudioBuffer, startSync, getMasterGain, handlePlayFailure]);
 
   // ─── 통합 재생 / 일시정지 / 버전 전환 처리 (경합 조건 원천 차단) ───
   useEffect(() => {
