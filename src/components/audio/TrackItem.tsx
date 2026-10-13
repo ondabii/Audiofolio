@@ -608,17 +608,17 @@ function VersionMemoRow({ version }: { version: any }) {
   const isMultiLine = memo.includes('\n');
 
   return (
-    <div className="grid grid-cols-[2rem_1fr] lg:grid-cols-[2.5rem_1fr] gap-x-2 lg:gap-x-3 mt-1 mb-2">
+    <div className="grid grid-cols-[2rem_1fr] lg:grid-cols-[2.5rem_1fr] gap-x-2 lg:gap-x-3 mt-1 mb-2 w-full min-w-0">
       <div />
-      <div className="bg-[#161a1d]/70 hover:bg-[#161a1d] border border-[#22272c]/80 rounded px-2.5 py-1.5 text-xs text-gray-300 transition-colors">
-        <div className="flex items-start justify-between gap-2">
-          <div className="min-w-0 flex-1">
+      <div className="min-w-0 w-full bg-[#161a1d]/70 hover:bg-[#161a1d] border border-[#22272c]/80 rounded px-2.5 py-1.5 text-xs text-gray-300 transition-colors overflow-hidden">
+        <div className="flex items-start justify-between gap-2 min-w-0 w-full">
+          <div className="min-w-0 flex-1 overflow-hidden">
             {isExpanded ? (
               <div className="text-gray-300 whitespace-pre-wrap leading-relaxed break-words font-medium text-[11px] lg:text-xs">
                 {renderMemoWithLinks(memo)}
               </div>
             ) : (
-              <div className="truncate text-gray-400 font-medium text-[11px] lg:text-xs">
+              <div className="truncate text-gray-400 font-medium text-[11px] lg:text-xs block w-full">
                 {renderMemoWithLinks(firstLine)}
               </div>
             )}
@@ -626,7 +626,7 @@ function VersionMemoRow({ version }: { version: any }) {
           {isMultiLine && (
             <button
               onClick={() => setIsExpanded(!isExpanded)}
-              className="shrink-0 text-[11px] font-bold text-primary hover:underline flex items-center gap-0.5 cursor-pointer select-none"
+              className="shrink-0 text-[11px] font-bold text-primary hover:underline flex items-center gap-0.5 cursor-pointer select-none ml-1.5 pl-1.5"
               title={isExpanded ? "메모 접기" : "메모 전체 보기"}
             >
               <span>{isExpanded ? '접기' : '더보기'}</span>
