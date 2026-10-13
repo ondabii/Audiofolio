@@ -564,9 +564,37 @@ function formatTime(seconds: number): string {
 }
 
 /**
+ * 메모 텍스트 내 URL(http://, https://)을 클릭 가능한 하이퍼링크로 자동 변환 렌더링하는 헬퍼
+ */
+function renderMemoWithLinks(text: string) {
+  if (!text) return null;
+  const urlRegex = /(https?:\/\/[^\s]+)/g;
+  const parts = text.split(urlRegex);
+
+  return parts.map((part, index) => {
+    if (part.match(urlRegex)) {
+      return (
+        <a
+          key={index}
+          href={part}
+          target="_blank"
+          rel="noopener noreferrer"
+          className="text-primary hover:underline underline-offset-2 break-all font-medium inline cursor-pointer"
+          onClick={(e) => e.stopPropagation()}
+        >
+          {part}
+        </a>
+      );
+    }
+    return <span key={index}>{part}</span>;
+  });
+}
+
+/**
  * 버전별 메모 표시 컴포넌트
  * - 접혀 있어도 첫 번째 줄이 요약 표시됨
  * - 펼치기/접기 인터랙션 지원
+ * - URL 자동 하이퍼링크 변환
  */
 function VersionMemoRow({ version }: { version: any }) {
   const [isExpanded, setIsExpanded] = useState<boolean>(
@@ -584,15 +612,14 @@ function VersionMemoRow({ version }: { version: any }) {
       <div />
       <div className="bg-[#161a1d]/70 hover:bg-[#161a1d] border border-[#22272c]/80 rounded px-2.5 py-1.5 text-xs text-gray-300 transition-colors">
         <div className="flex items-start justify-between gap-2">
-          <div className="flex items-start gap-1.5 min-w-0 flex-1">
-            <span className="text-primary font-bold shrink-0 mt-0.5 text-[11px]">📝 Note:</span>
+          <div className="min-w-0 flex-1">
             {isExpanded ? (
               <div className="text-gray-300 whitespace-pre-wrap leading-relaxed break-words font-medium text-[11px] lg:text-xs">
-                {memo}
+                {renderMemoWithLinks(memo)}
               </div>
             ) : (
               <div className="truncate text-gray-400 font-medium text-[11px] lg:text-xs">
-                {firstLine}
+                {renderMemoWithLinks(firstLine)}
               </div>
             )}
           </div>

@@ -640,7 +640,7 @@ export function AdminTrackDetail({ track, projectId }: AdminTrackDetailProps) {
                       {version.bitrate ? <span>{version.bitrate} kbps</span> : null}
                       {version.memo && version.memo.trim().length > 0 && (
                         <span className="text-[#f5a623] truncate max-w-[220px] font-medium" title={version.memo}>
-                          • 📝 {version.memo.split('\n')[0]}
+                          • {version.memo.split('\n')[0]}
                         </span>
                       )}
                     </div>
