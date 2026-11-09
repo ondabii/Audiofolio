@@ -118,8 +118,9 @@ export async function cacheProjectAudioFiles(
           if (track.versions) {
             track.versions.forEach((ver) => {
               if (ver.audio_url) {
-                const apiFetchUrl = `/api/audio-url?key=${encodeURIComponent(ver.audio_url)}`;
-                urlsToCache.push(apiFetchUrl);
+                const encodedKey = ver.audio_url.split('/').map((seg: string) => encodeURIComponent(seg)).join('/');
+                const directUrl = ver.public_url || `https://afc.ondabii.com/${encodedKey}`;
+                urlsToCache.push(directUrl);
               }
             });
           }

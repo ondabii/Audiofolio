@@ -20,6 +20,7 @@ export interface TrackVersion {
   status: string;
   created_at: string;
   isReady?: boolean;
+  public_url?: string;
 }
 
 export function AudioEngine({ trackVersions = [] }: { trackVersions: TrackVersion[] }) {
@@ -223,19 +224,32 @@ export function AudioEngine({ trackVersions = [] }: { trackVersions: TrackVersio
       }, 10000);
     }
 
-    const url = `/api/audio-url?key=${encodeURIComponent(version.audio_url)}`;
+    // 💡 R2 다이렉트 고속 스트리밍 (CORS 허용으로 3.6MB/s 즉시 수신) + 프록시 fallback
+    const encodedKey = version.audio_url.split('/').map((seg: string) => encodeURIComponent(seg)).join('/');
+    const directUrl = version.public_url || `https://afc.ondabii.com/${encodedKey}`;
+    const proxyUrl = `/api/audio-url?key=${encodeURIComponent(version.audio_url)}`;
     
     // 💡 Cache API 가로채기 (오프라인 재생 지원)
     let res: Response;
     let isFromCache = false;
     try {
       const cache = await caches.open('audiofolio-audio-v1');
-      const cachedRes = await cache.match(url);
+      const cachedRes = (await cache.match(directUrl)) || (await cache.match(proxyUrl));
       if (cachedRes) {
         res = cachedRes;
         isFromCache = true;
       } else {
-        res = await fetch(url, { signal: abortCtrl.signal });
+        // 1차 시도: R2 다이렉트 초고속 fetch (3.6MB/s)
+        try {
+          res = await fetch(directUrl, { signal: abortCtrl.signal });
+          if (!res.ok) {
+            throw new Error(`R2 direct HTTP error: ${res.status}`);
+          }
+        } catch (directErr) {
+          console.warn("R2 다이렉트 fetch 실패, 프록시로 fallback:", directErr);
+          // 2차 시도: 프록시 안전 fallback
+          res = await fetch(proxyUrl, { signal: abortCtrl.signal });
+        }
       }
     } catch (e: unknown) {
       if (reportProgress) {

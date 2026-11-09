@@ -24,8 +24,14 @@ export function TrackItem({ track, readOnly = false }: { track: any; readOnly?: 
 
   const handleDownloadVersion = async (v: any) => {
     try {
-      const url = `/api/audio-url?key=${encodeURIComponent(v.audio_url)}`;
-      const response = await fetch(url);
+      const encodedKey = v.audio_url.split('/').map((seg: string) => encodeURIComponent(seg)).join('/');
+      const directUrl = v.public_url || `https://afc.ondabii.com/${encodedKey}`;
+      const proxyUrl = `/api/audio-url?key=${encodeURIComponent(v.audio_url)}`;
+
+      let response = await fetch(directUrl);
+      if (!response.ok) {
+        response = await fetch(proxyUrl);
+      }
       if (!response.ok) throw new Error("다운로드 실패");
       
       const blob = await response.blob();
